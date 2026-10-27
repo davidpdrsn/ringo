@@ -42,22 +42,57 @@ Other recipes:
 The config lives at `~/.config/radial-ring-menu/config.toml`, or under
 `$XDG_CONFIG_HOME` if that's set. A default is written on first launch. Changes
 are picked up when you save. The menu bar menu has *Open Config…* and
-*Preview Menu*.
+*Preview Menu*, and *Edit Style…* opens a window for trying out the look on a
+live preview and writing it to the config. It only changes the settings you
+edited, and keeps the rest of the file, comments included.
 
 ```toml
 hotkey = "option+space"
 
-# Distance from the cursor to the icons, and icon size, in points.
-radius = 110
-icon_size = 64
-
 # How long the icons take to fan out when the menu opens, in milliseconds.
 open_animation_ms = 180
 
-# The grey ring behind the icons, as distances from the cursor in points.
-# Defaults to a bit narrower than the icons, so they stick out of it.
-backdrop_inner_radius = 90
-backdrop_outer_radius = 130
+# How far the icons are from the cursor, and their size, in points.
+[icons]
+radius = 110
+size = 64
+selected_scale = 1.22     # how much bigger the selected app's icon gets
+unselected_opacity = 0.55 # how opaque the others are while one is selected
+
+# Colors are "#RRGGBB", or "#RRGGBBAA" where the last two digits are the opacity.
+
+# The grey ring behind the icons: how far its edges are from the cursor, in
+# points, and a color laid over it (partly transparent tints the ring, opaque
+# replaces it). Defaults to a bit narrower than the icons, so they stick out of
+# it, and just the blur.
+[outer_ring]
+inner_radius = 90
+outer_radius = 130
+color = "#00000080"
+
+# The part of the ring in the direction of the cursor.
+[outer_ring.highlight]
+shape = "wedge"       # fills the ring's width and fades out at its ends; or
+                      # "bubble", an arc with rounded ends that reach past its width
+width = 60            # degrees; defaults to one app's share of the ring, at most 90
+fade = 6              # degrees a wedge fades out over; defaults to a tenth of its width
+overhang = 0          # points it reaches past both edges of the ring
+color = "#FF9500"     # also the glow's; defaults to the system accent color
+glow_spread = 0       # points the solid part of the glow reaches past the highlight
+glow_blur = 0         # points its edge fades out over
+glow_opacity = 0.3    # from 0 to 1
+
+# The small circle in the middle, a translucent white by default.
+[inner_ring]
+color = "#FFFFFF8C"
+
+# Takes the same settings as the outer ring's highlight. These are its defaults.
+[inner_ring.highlight]
+shape = "bubble"
+width = 72
+overhang = 1
+glow_blur = 3
+glow_opacity = 0.8
 
 # Apps go clockwise, starting at 12 o'clock.
 [[apps]]
@@ -156,6 +191,13 @@ osascript -e 'id of app "Safari"'
 
 If there are more apps than fit around the ring, the radius grows to make room,
 and the grey ring behind the icons grows by the same amount.
+
+**Highlights**: both rings light up in the direction of the cursor, and both
+highlights take the same settings. So the outer one can look exactly like the
+inner one by copying the inner one's defaults: `shape = "bubble"`, `width = 72`,
+`overhang = 1`, `glow_blur = 3` and `glow_opacity = 0.8`. The glow works like
+CSS's `box-shadow`: `glow_spread` grows it with a hard edge, and `glow_blur`
+softens that edge.
 
 ## Command line
 

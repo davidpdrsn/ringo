@@ -119,11 +119,23 @@ import Testing
 }
 
 @Suite struct ConfigTests {
+    /// The message `text` fails to parse with.
+    private func errorMessage(_ text: String) -> String? {
+        do {
+            _ = try Config.parse(text)
+            return nil
+        } catch {
+            return error.description
+        }
+    }
+
     @Test func parsesFullConfig() throws {
         let config = try Config.parse("""
             hotkey = "cmd+shift+k"
+
+            [icons]
             radius = 140
-            icon_size = 48.5
+            size = 48.5
 
             [[apps]]
             name = "Safari"
@@ -151,6 +163,10 @@ import Testing
         #expect(config.radius == Config.defaultRadius)
         #expect(config.iconSize == Config.defaultIconSize)
         #expect(config.openAnimationDuration == Config.defaultOpenAnimationMs / 1000)
+        #expect(config.outerRing.color == nil)
+        #expect(config.outerRing.highlight == .outerDefault)
+        #expect(config.innerRing.color == nil)
+        #expect(config.innerRing.highlight == .innerDefault)
         #expect(config.apps.isEmpty)
     }
 
@@ -161,26 +177,109 @@ import Testing
         #expect(throws: ConfigError.self) { try Config.parse("open_animation_ms = 5000") }
     }
 
-    @Test func parsesBackdropRadii() throws {
-        let config = try Config.parse("backdrop_inner_radius = 70\nbackdrop_outer_radius = 130.5")
-        #expect(config.backdropInnerRadius == 70)
-        #expect(config.backdropOuterRadius == 130.5)
+    @Test func parsesSelectedAndUnselectedIcons() throws {
+        let config = try Config.parse("[icons]\nselected_scale = 1.5\nunselected_opacity = 0.3")
+        #expect(config.selectedIconScale == 1.5)
+        #expect(config.unselectedIconOpacity == 0.3)
+        let defaults = try Config.parse("")
+        #expect(defaults.selectedIconScale == Config.defaultSelectedIconScale)
+        #expect(defaults.unselectedIconOpacity == Config.defaultUnselectedIconOpacity)
+        #expect(throws: ConfigError.self) { try Config.parse("[icons]\nselected_scale = 0.2") }
+        #expect(throws: ConfigError.self) { try Config.parse("[icons]\nselected_scale = 4") }
+        #expect(throws: ConfigError.self) { try Config.parse("[icons]\nunselected_opacity = 1.5") }
     }
 
-    @Test func derivesBackdropRadiiFromRadiusAndIconSize() throws {
-        let config = try Config.parse("radius = 100\nicon_size = 50")
-        #expect(config.backdropInnerRadius == 100 - 50 * Config.defaultBackdropHalfWidthRatio)
-        #expect(config.backdropOuterRadius == 100 + 50 * Config.defaultBackdropHalfWidthRatio)
+    @Test func pointsMovedSettingsToTheirNewPlace() {
+        #expect(errorMessage("icon_size = 64")?.contains("`size` under `[icons]`") == true)
+        #expect(errorMessage("radius = 110")?.contains("`radius` under `[icons]`") == true)
+    }
+
+    @Test func namesTheTableOfAnUnknownKey() {
+        #expect(errorMessage("[icons]\nsise = 50")?.contains("[icons]") == true)
+        #expect(errorMessage("[outer_ring.highlight]\nwidht = 50")?.contains("[outer_ring.highlight]") == true)
+    }
+
+    @Test func parsesOuterRing() throws {
+        let config = try Config.parse("""
+            [outer_ring]
+            inner_radius = 70
+            outer_radius = 130.5
+            color = "#00000080"
+            """)
+        #expect(config.outerRing.innerRadius == 70)
+        #expect(config.outerRing.outerRadius == 130.5)
+        #expect(config.outerRing.color == RGBAColor(red: 0, green: 0, blue: 0, alpha: 128.0 / 255))
+    }
+
+    @Test func derivesOuterRingFromIcons() throws {
+        let config = try Config.parse("[icons]\nradius = 100\nsize = 50")
+        #expect(config.outerRing.innerRadius == 100 - 50 * Config.defaultOuterRingHalfWidthRatio)
+        #expect(config.outerRing.outerRadius == 100 + 50 * Config.defaultOuterRingHalfWidthRatio)
         // Setting one edge leaves the other at its default.
-        let inner = try Config.parse("backdrop_inner_radius = 60")
-        #expect(inner.backdropOuterRadius == Config.defaultRadius + Config.defaultIconSize * Config.defaultBackdropHalfWidthRatio)
+        let inner = try Config.parse("[outer_ring]\ninner_radius = 60")
+        #expect(inner.outerRing.outerRadius == Config.defaultRadius + Config.defaultIconSize * Config.defaultOuterRingHalfWidthRatio)
     }
 
-    @Test func rejectsBadBackdropRadii() {
-        #expect(throws: ConfigError.self) { try Config.parse("backdrop_inner_radius = -1") }
-        #expect(throws: ConfigError.self) { try Config.parse("backdrop_inner_radius = 100\nbackdrop_outer_radius = 100") }
+    @Test func rejectsBadOuterRing() {
+        #expect(throws: ConfigError.self) { try Config.parse("[outer_ring]\ninner_radius = -1") }
+        #expect(throws: ConfigError.self) { try Config.parse("[outer_ring]\ninner_radius = 100\nouter_radius = 100") }
         // Only an outer edge inside the default inner one.
-        #expect(throws: ConfigError.self) { try Config.parse("backdrop_outer_radius = 50") }
+        #expect(throws: ConfigError.self) { try Config.parse("[outer_ring]\nouter_radius = 50") }
+    }
+
+    @Test func parsesBothHighlightsTheSameWay() throws {
+        let style = """
+            shape = "bubble"
+            width = 75
+            fade = 2.5
+            overhang = 1
+            color = "#FF8800"
+            glow_spread = 2
+            glow_blur = 6
+            glow_opacity = 0.8
+            """
+        let expected = RingHighlight(
+            shape: .bubble, width: 75, fade: 2.5, overhang: 1,
+            color: RGBAColor(red: 1, green: 136.0 / 255, blue: 0, alpha: 1),
+            glowSpread: 2, glowBlur: 6, glowOpacity: 0.8
+        )
+        #expect(try Config.parse("[outer_ring.highlight]\n" + style).outerRing.highlight == expected)
+        #expect(try Config.parse("[inner_ring.highlight]\n" + style).innerRing.highlight == expected)
+    }
+
+    @Test func keepsEachHighlightsOwnDefaults() throws {
+        let config = try Config.parse("[outer_ring.highlight]\nglow_blur = 4\n\n[inner_ring.highlight]\nwidth = 90")
+        var outer = RingHighlight.outerDefault
+        outer.glowBlur = 4
+        #expect(config.outerRing.highlight == outer)
+        var inner = RingHighlight.innerDefault
+        inner.width = 90
+        #expect(config.innerRing.highlight == inner)
+    }
+
+    @Test func parsesInnerRingColor() throws {
+        let config = try Config.parse("[inner_ring]\ncolor = \"#ffffff80\"")
+        #expect(config.innerRing.color == RGBAColor(red: 1, green: 1, blue: 1, alpha: 128.0 / 255))
+    }
+
+    @Test func rejectsBadColors() {
+        for bad in ["FF8800", "#FF88", "#FF880", "#GG8800", "#+F8800", "#FF8800801"] {
+            #expect(throws: ConfigError.self) { try Config.parse("[inner_ring]\ncolor = \"\(bad)\"") }
+        }
+        #expect(throws: ConfigError.self) { try Config.parse("[outer_ring]\ncolor = \"black\"") }
+        #expect(throws: ConfigError.self) { try Config.parse("[outer_ring.highlight]\ncolor = \"white\"") }
+    }
+
+    @Test func rejectsBadHighlights() {
+        let bad = [
+            "shape = \"blob\"", "width = 0", "width = 400", "fade = -1", "fade = 200",
+            "overhang = -1", "overhang = 60", "glow_spread = -1", "glow_spread = 60",
+            "glow_blur = -1", "glow_blur = 60", "glow_opacity = -0.1", "glow_opacity = 1.5",
+        ]
+        for setting in bad {
+            #expect(throws: ConfigError.self) { try Config.parse("[outer_ring.highlight]\n\(setting)") }
+            #expect(throws: ConfigError.self) { try Config.parse("[inner_ring.highlight]\n\(setting)") }
+        }
     }
 
     @Test func templateIsValid() throws {
@@ -485,5 +584,131 @@ import Testing
     @Test func showsTheIconByDefault() throws {
         #expect(try Config.parse("").showMenuBarIcon)
         #expect(try Config.parse("show_menu_bar_icon = false").showMenuBarIcon == false)
+    }
+}
+
+@Suite struct ConfigEditTests {
+    @Test func changesAValueInPlaceKeepingItsComment() {
+        let text = "hotkey = \"x\"\n\n[icons]\nradius = 110  # far out\nsize = 64\n"
+        let edited = ConfigEdit.apply([ConfigEdit(table: "icons", key: "radius", value: "120")], to: text)
+        #expect(edited == "hotkey = \"x\"\n\n[icons]\nradius = 120  # far out\nsize = 64\n")
+    }
+
+    @Test func changesAColorKeepingItsComment() {
+        let text = "[inner_ring]\ncolor = \"#6867AF\" # purple\n"
+        let edited = ConfigEdit.apply([ConfigEdit(table: "inner_ring", key: "color", value: "\"#112233\"")], to: text)
+        #expect(edited == "[inner_ring]\ncolor = \"#112233\" # purple\n")
+    }
+
+    @Test func onlyChangesTheSettingInItsOwnTable() {
+        let text = "[outer_ring]\ncolor = \"#000000\"\n\n[inner_ring]\ncolor = \"#000000\"\n"
+        let edited = ConfigEdit.apply([ConfigEdit(table: "inner_ring", key: "color", value: "\"#FFFFFF\"")], to: text)
+        #expect(edited == "[outer_ring]\ncolor = \"#000000\"\n\n[inner_ring]\ncolor = \"#FFFFFF\"\n")
+    }
+
+    @Test func addsASettingAfterTheLastOneInItsTable() {
+        let text = "[outer_ring]\ninner_radius = 80\n# color = \"#000000\"\n\n[[apps]]\nname = \"A\"\n"
+        let edited = ConfigEdit.apply([ConfigEdit(table: "outer_ring", key: "outer_radius", value: "130")], to: text)
+        #expect(edited == "[outer_ring]\ninner_radius = 80\nouter_radius = 130\n# color = \"#000000\"\n\n[[apps]]\nname = \"A\"\n")
+    }
+
+    @Test func addsAMissingTableBeforeTheApps() {
+        let text = "hotkey = \"x\"\n\n# The apps.\n[[apps]]\nname = \"A\"\n"
+        let edited = ConfigEdit.apply([ConfigEdit(table: "inner_ring", key: "color", value: "\"#FFFFFF\"")], to: text)
+        #expect(edited == "hotkey = \"x\"\n\n[inner_ring]\ncolor = \"#FFFFFF\"\n\n# The apps.\n[[apps]]\nname = \"A\"\n")
+    }
+
+    @Test func addsASettingOutsideTablesBeforeTheFirstTable() {
+        let text = "hotkey = \"x\"\n\n[icons]\nsize = 64\n"
+        let edited = ConfigEdit.apply([ConfigEdit(table: nil, key: "open_animation_ms", value: "125")], to: text)
+        #expect(edited == "hotkey = \"x\"\nopen_animation_ms = 125\n\n[icons]\nsize = 64\n")
+    }
+
+    @Test func removesASetting() {
+        let text = "[inner_ring]\ncolor = \"#000000\"\n"
+        #expect(ConfigEdit.apply([ConfigEdit(table: "inner_ring", key: "color", value: nil)], to: text) == "[inner_ring]\n")
+    }
+
+    @Test func leavesTheAppsAlone() {
+        let text = "hotkey = \"x\"\n\n[[apps]]\nname = \"A\"\n"
+        let edited = ConfigEdit.apply([ConfigEdit(table: nil, key: "name", value: "\"B\"")], to: text)
+        #expect(edited == "hotkey = \"x\"\nname = \"B\"\n\n[[apps]]\nname = \"A\"\n")
+    }
+
+    @Test func applyingAnUnchangedStyleChangesNothing() throws {
+        let text = Config.template
+        #expect(try Config.applyingStyle(of: Config.parse(text), to: text) == text)
+    }
+
+    @Test func appliesOnlyTheChangedSettings() throws {
+        let text = "hotkey = \"x\"\n\n[outer_ring.highlight]\nshape = \"bubble\" # round\n"
+        var config = try Config.parse(text)
+        config.outerRing.highlight.shape = .wedge
+        config.innerRing.highlight.glowOpacity = 0.5
+        let applied = try Config.applyingStyle(of: config, to: text)
+        #expect(applied == "hotkey = \"x\"\n\n[outer_ring.highlight]\nshape = \"wedge\" # round\n\n[inner_ring.highlight]\nglow_opacity = 0.5\n")
+    }
+
+    @Test func keepsSettingsThatWouldFollowOthersWhereTheyWere() throws {
+        // The outer ring's edges follow the icon size unless they're set.
+        let text = "[icons]\nsize = 64\n"
+        var config = try Config.parse(text)
+        config.iconSize = 100
+        let applied = try Config.parse(Config.applyingStyle(of: config, to: text))
+        #expect(applied.styleSettings == config.styleSettings)
+    }
+
+    @Test func writesColorsAsHex() {
+        #expect(RGBAColor(red: 1, green: 136.0 / 255, blue: 0, alpha: 1).hex == "#FF8800")
+        #expect(RGBAColor(red: 0, green: 0, blue: 0, alpha: 128.0 / 255).hex == "#00000080")
+    }
+}
+
+@MainActor
+@Suite struct StyleEditorTests {
+    private func temporaryConfig(_ text: String) throws -> URL {
+        let url = FileManager.default.temporaryDirectory.appending(path: "radial-ring-menu-style-\(UUID().uuidString).toml")
+        try text.write(to: url, atomically: true, encoding: .utf8)
+        return url
+    }
+
+    @Test func appliesEditsToTheConfigFile() throws {
+        let text = "hotkey = \"x\"\n\n# The apps.\n[[apps]]\nname = \"Safari\"\n"
+        let url = try temporaryConfig(text)
+        defer { try? FileManager.default.removeItem(at: url) }
+        let model = StyleEditorModel(configURL: url, config: try Config.parse(text), items: [])
+        model.edited.innerRing.highlight.glowOpacity = 0.5
+        #expect(model.hasChanges)
+
+        model.apply()
+        #expect(model.problem == nil)
+        #expect(!model.hasChanges)
+        #expect(try String(contentsOf: url, encoding: .utf8)
+            == "hotkey = \"x\"\n\n[inner_ring.highlight]\nglow_opacity = 0.5\n\n# The apps.\n[[apps]]\nname = \"Safari\"\n")
+    }
+
+    @Test func leavesTheFileAloneWhenTheEditsAreInvalid() throws {
+        let text = "hotkey = \"x\"\n"
+        let url = try temporaryConfig(text)
+        defer { try? FileManager.default.removeItem(at: url) }
+        let model = StyleEditorModel(configURL: url, config: try Config.parse(text), items: [])
+        // Inside the inner edge.
+        model.edited.outerRing.outerRadius = 10
+
+        model.apply()
+        #expect(model.problem != nil)
+        #expect(model.hasChanges)
+        #expect(try String(contentsOf: url, encoding: .utf8) == text)
+    }
+
+    @Test func keepsUnappliedEditsWhenTheFileReloads() throws {
+        let config = try Config.parse("")
+        let model = StyleEditorModel(configURL: URL(fileURLWithPath: "/dev/null"), config: config, items: [])
+        model.edited.iconSize = 100
+        var reloaded = config
+        reloaded.radius = 150
+        model.configDidLoad(reloaded, items: [])
+        #expect(model.edited.iconSize == 100)
+        #expect(model.saved.radius == 150)
     }
 }

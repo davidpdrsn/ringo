@@ -14,6 +14,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let mouseButtons = MouseButtonMonitor()
     private var identifyTimeout: DispatchWorkItem?
     private var watcher: ConfigWatcher?
+    private var styleEditor: StyleEditorWindowController?
+
+    /// The config and apps last loaded, for the style editor.
+    private var config: Config?
+    private var items: [MenuItem] = []
 
     /// The config text last applied, so saves that don't change anything are skipped.
     private var loadedText: String?
@@ -112,6 +117,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         controller.configure(items: items, config: config)
+        self.config = config
+        self.items = items
+        styleEditor?.model.configDidLoad(config, items: items)
         statusItem?.isVisible = config.showMenuBarIcon
         hotkeyMenuItem.title = registeredHotkey.map { "Hold \($0) to open" } ?? "No hotkey registered"
 
@@ -153,6 +161,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         menu.addItem(hotkeyMenuItem)
         menu.addItem(.separator())
         menu.addItem(withTitle: "Preview Menu", action: #selector(previewMenu), keyEquivalent: "").target = self
+        menu.addItem(withTitle: "Edit Style…", action: #selector(editStyle), keyEquivalent: "").target = self
         menu.addItem(withTitle: "Identify Mouse Button…", action: #selector(identifyMouseButton), keyEquivalent: "").target = self
         menu.addItem(withTitle: "Open Config…", action: #selector(openConfig), keyEquivalent: ",").target = self
         menu.addItem(withTitle: "Reload Config", action: #selector(reloadConfigFromMenu), keyEquivalent: "r").target = self
@@ -215,6 +224,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         DispatchQueue.main.async { [controller] in
             controller.openSticky()
         }
+    }
+
+    @objc private func editStyle() {
+        guard let config else {
+            // Shows what's wrong with it.
+            reloadConfig(force: true)
+            return
+        }
+        let editor = styleEditor ?? StyleEditorWindowController(
+            model: StyleEditorModel(configURL: configURL, config: config, items: items)
+        )
+        styleEditor = editor
+        editor.showWindow(nil)
+        NSApp.activate()
     }
 
     @objc private func openConfig() {

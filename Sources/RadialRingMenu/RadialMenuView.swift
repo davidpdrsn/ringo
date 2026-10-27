@@ -18,8 +18,12 @@ final class RadialMenuView: NSView {
     private var itemLayers: [ItemLayers] = []
     private var layout = RadialLayout(count: 0, radius: 0, iconSize: 0)
     private var iconSize: CGFloat = 64
+    private var selectedIconScale: CGFloat = 1.22
+    private var unselectedIconOpacity: CGFloat = 0.55
     private var openDuration: CFTimeInterval = 0.18
     private var backdropOuterRadius: CGFloat = 0
+    /// The edges the backdrop's mask was made for.
+    private var backdropMaskRadii: (outer: CGFloat, inner: CGFloat)?
     private var rasterScale: CGFloat = 0
 
     private var center: CGPoint = .zero
@@ -31,14 +35,18 @@ final class RadialMenuView: NSView {
 
     private let backdrop = NSVisualEffectView()
     private let overlay = NSView()
+    /// The configured color over the blurred backdrop, scaled and faded with it.
+    private let backdropTint = CAShapeLayer()
+    private let outerHighlight = RingHighlightLayers()
     private let centerRing = CAShapeLayer()
-    private let pointer = CAShapeLayer()
+    private let innerHighlight = RingHighlightLayers()
     private let labelBackground = CALayer()
     private let label = CATextLayer()
 
     /// Each icon starts this fraction of `openDuration` after the one before it.
     private static let staggerRatio = 1.0 / 15
     private static let centerRingRadius: CGFloat = 13
+    private static let centerRingLineWidth: CGFloat = 2.5
     private static let labelFont = NSFont.systemFont(ofSize: 13, weight: .semibold)
 
     override init(frame: NSRect) {
@@ -62,21 +70,9 @@ final class RadialMenuView: NSView {
         )
         centerRing.path = ringPath
         centerRing.fillColor = NSColor.black.withAlphaComponent(0.3).cgColor
-        centerRing.strokeColor = NSColor.white.withAlphaComponent(0.55).cgColor
-        centerRing.lineWidth = 2.5
+        centerRing.lineWidth = Self.centerRingLineWidth
 
-        let arcHalfWidth = CGFloat.pi * 0.2
-        let arcPath = CGMutablePath()
-        arcPath.addArc(center: .zero, radius: Self.centerRingRadius, startAngle: -arcHalfWidth, endAngle: arcHalfWidth, clockwise: false)
-        pointer.path = arcPath
-        pointer.fillColor = nil
-        pointer.strokeColor = NSColor.controlAccentColor.cgColor
-        pointer.lineWidth = 4.5
-        pointer.lineCap = .round
-        pointer.shadowColor = NSColor.controlAccentColor.cgColor
-        pointer.shadowOpacity = 0.8
-        pointer.shadowRadius = 3
-        pointer.shadowOffset = .zero
+        backdropTint.fillRule = .evenOdd
 
         labelBackground.backgroundColor = NSColor.black.withAlphaComponent(0.65).cgColor
         labelBackground.borderColor = NSColor.white.withAlphaComponent(0.15).cgColor
@@ -87,7 +83,7 @@ final class RadialMenuView: NSView {
         label.alignmentMode = .center
         labelBackground.addSublayer(label)
 
-        for layer in [centerRing, pointer, labelBackground] {
+        for layer in [backdropTint, outerHighlight.layer, centerRing, innerHighlight.layer, labelBackground] {
             layer.opacity = 0
             overlay.layer?.addSublayer(layer)
         }
@@ -112,25 +108,75 @@ final class RadialMenuView: NSView {
     // MARK: - Setup
 
     func configure(items: [MenuItem], layout: RadialLayout, config: Config) {
+        self.layout = layout
+        iconSize = config.iconSize
+        // Icons are drawn for their selected size, so this is set with them.
+        selectedIconScale = config.selectedIconScale
+        rasterScale = 0
+
+        // Without the fade layers get when added, which a preview being restyled
+        // would show.
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
         for item in itemLayers {
             item.container.removeFromSuperlayer()
         }
-        self.layout = layout
-        iconSize = config.iconSize
-        openDuration = config.openAnimationDuration
-        rasterScale = 0
-
         itemLayers = items.map { ItemLayers(item: $0, iconSize: iconSize) }
         for item in itemLayers {
             item.container.opacity = 0
             overlay.layer?.insertSublayer(item.container, below: labelBackground)
         }
+        CATransaction.commit()
+
+        applyStyle(config)
+    }
+
+    /// Updates the rings and their highlights to `config`, leaving the icons and
+    /// any animation as they are. `config` must have the radius and icon size the
+    /// layout was made with.
+    func applyStyle(_ config: Config) {
+        openDuration = config.openAnimationDuration
+        unselectedIconOpacity = config.unselectedIconOpacity
 
         // Keep the backdrop around the icons when the layout grew the radius to
         // fit them.
         let growth = layout.radius - config.radius
-        backdropOuterRadius = config.backdropOuterRadius + growth
-        backdrop.maskImage = Self.ringMask(outer: backdropOuterRadius, inner: config.backdropInnerRadius + growth)
+        backdropOuterRadius = config.outerRing.outerRadius + growth
+        let backdropInnerRadius = config.outerRing.innerRadius + growth
+        // Only when it changes, since a new mask redraws the blur.
+        let maskRadii = (outer: backdropOuterRadius, inner: CGFloat(backdropInnerRadius))
+        if backdropMaskRadii.map({ $0 != maskRadii }) ?? true {
+            backdropMaskRadii = maskRadii
+            backdrop.maskImage = Self.ringMask(outer: backdropOuterRadius, inner: backdropInnerRadius)
+        }
+
+        // For highlights without a width: one app's share of the ring, so on the
+        // outer ring it fills the gaps either side of the icon being pointed at
+        // (which covers the ring's whole width). At most a quarter of the ring
+        // when there are only a few apps.
+        let appShare = min(.pi / 2, 2 * .pi / CGFloat(max(layout.count, 1)))
+        outerHighlight.configure(
+            inner: backdropInnerRadius,
+            outer: backdropOuterRadius,
+            style: config.outerRing.highlight,
+            defaultWidth: appShare
+        )
+        innerHighlight.configure(
+            inner: Self.centerRingRadius - Self.centerRingLineWidth / 2,
+            outer: Self.centerRingRadius + Self.centerRingLineWidth / 2,
+            style: config.innerRing.highlight,
+            defaultWidth: appShare
+        )
+
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        let tintBounds = CGRect(x: 0, y: 0, width: backdropOuterRadius * 2, height: backdropOuterRadius * 2)
+        backdropTint.bounds = tintBounds
+        backdropTint.path = ringPath(in: tintBounds, width: backdropOuterRadius - backdropInnerRadius)
+        backdropTint.fillColor = config.outerRing.color?.cgColor
+        backdropTint.isHidden = config.outerRing.color == nil
+        centerRing.strokeColor = config.innerRing.color?.cgColor ?? NSColor.white.withAlphaComponent(0.55).cgColor
+        CATransaction.commit()
     }
 
     /// Resets the open animation, centered on `center` (in view coordinates).
@@ -143,29 +189,44 @@ final class RadialMenuView: NSView {
         labelOpacity = 0
         labelIndex = nil
 
+        CATransaction.begin()
+        // Including the new icon images, which would otherwise cross-fade in.
+        CATransaction.setDisableActions(true)
         let scale = window?.backingScaleFactor ?? 2
         if scale != rasterScale {
             rasterScale = scale
             for item in itemLayers {
-                item.rasterize(iconSize: iconSize, scale: scale)
+                item.rasterize(largestSize: iconSize * max(1, selectedIconScale), scale: scale)
             }
-            for layer in [centerRing, pointer, labelBackground, label] {
+            for layer in [backdropTint, centerRing, labelBackground, label] {
                 layer.contentsScale = scale
             }
+            outerHighlight.setContentsScale(scale)
+            innerHighlight.setContentsScale(scale)
         }
-
-        CATransaction.begin()
-        CATransaction.setDisableActions(true)
         for (item, badge) in zip(itemLayers, badges) {
             item.highlight = 0
             item.emphasis = 1
             item.setBadge(badge, iconSize: iconSize)
         }
         centerRing.position = center
-        pointer.position = center
+        outerHighlight.layer.position = center
+        innerHighlight.layer.position = center
+        backdropTint.position = center
         CATransaction.commit()
 
         update(time: time, selection: nil, pointer: .zero)
+    }
+
+    /// Skips straight to how the pointer, label and icons look with `selection`,
+    /// for a preview that's restyled while it's open.
+    func settle(selection: Int?) {
+        pointerOpacity = 1
+        labelOpacity = selection == nil ? 0 : 1
+        for (index, item) in itemLayers.enumerated() {
+            item.highlight = index == selection ? 1 : 0
+            item.emphasis = selection == nil || index == selection ? 1 : unselectedIconOpacity
+        }
     }
 
     // MARK: - Animation
@@ -188,6 +249,8 @@ final class RadialMenuView: NSView {
             height: backdropSize
         )
         backdrop.alphaValue = appear
+        backdropTint.opacity = Float(appear)
+        backdropTint.transform = CATransform3DMakeScale(backdropScale, backdropScale, 1)
 
         centerRing.opacity = Float(appear)
         centerRing.transform = CATransform3DMakeScale(appear, appear, 1)
@@ -199,19 +262,20 @@ final class RadialMenuView: NSView {
             item.container.position = CGPoint(x: center.x + offset.x * travel, y: center.y + offset.y * travel)
 
             approach(&item.highlight, index == selection ? 1 : 0, rate: 24, dt: dt)
-            approach(&item.emphasis, selection == nil || index == selection ? 1 : 0.55, rate: 18, dt: dt)
+            approach(&item.emphasis, selection == nil || index == selection ? 1 : unselectedIconOpacity, rate: 18, dt: dt)
 
-            let scale = (0.2 + 0.8 * easeOutCubic(t)) * (1 + 0.22 * item.highlight)
+            let scale = (0.2 + 0.8 * easeOutCubic(t)) * (1 + (selectedIconScale - 1) * item.highlight)
             item.container.transform = CATransform3DMakeScale(scale, scale, 1)
             item.container.opacity = Float(min(1, t * 2.5) * item.emphasis)
-            item.halo.opacity = Float(item.highlight)
         }
 
         let pointerVisible = hypot(offset.x, offset.y) >= layout.deadZone * 0.5
         approach(&pointerOpacity, pointerVisible ? 1 : 0, rate: 30, dt: dt)
-        pointer.opacity = Float(pointerOpacity * appear)
-        if pointerVisible {
-            pointer.transform = CATransform3DMakeRotation(atan2(offset.y, offset.x), 0, 0, 1)
+        for highlight in [outerHighlight, innerHighlight] {
+            highlight.layer.opacity = Float(pointerOpacity * appear)
+            if pointerVisible {
+                highlight.layer.transform = CATransform3DMakeRotation(atan2(offset.y, offset.x), 0, 0, 1)
+            }
         }
 
         updateLabel(selection: selection, dt: dt)
@@ -254,6 +318,105 @@ final class RadialMenuView: NSView {
     }
 }
 
+/// The highlight on a ring in the direction of the cursor: a wedge or bubble
+/// with a glow behind it. It's drawn pointing at angle 0, and `layer` is rotated
+/// as a whole to follow the cursor.
+@MainActor
+private final class RingHighlightLayers {
+    let layer = CALayer()
+    /// Only a shadow, shaped by its `shadowPath`.
+    private let glow = CALayer()
+    /// A conic gradient around the center, lit at angle 0 (towards `endPoint`).
+    private let wedge = CAGradientLayer()
+    private let wedgeMask = CAShapeLayer()
+    private let bubble = CAShapeLayer()
+
+    init() {
+        wedge.type = .conic
+        wedge.startPoint = CGPoint(x: 0.5, y: 0.5)
+        wedge.endPoint = CGPoint(x: 1, y: 0.5)
+        wedgeMask.fillRule = .evenOdd
+        wedge.mask = wedgeMask
+        bubble.fillColor = nil
+        bubble.lineCap = .round
+        glow.shadowOffset = .zero
+        for sublayer in [glow, wedge, bubble] {
+            layer.addSublayer(sublayer)
+        }
+    }
+
+    /// Fits the highlight to a ring between the `inner` and `outer` radius.
+    /// `defaultWidth`, in radians, is for a `style` without a width.
+    func configure(inner: CGFloat, outer: CGFloat, style: RingHighlight, defaultWidth: CGFloat) {
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        defer { CATransaction.commit() }
+
+        // The highlight's edges, past the ring's by the overhang.
+        let overhang = CGFloat(style.overhang)
+        let far = outer + overhang
+        let near = max(0, inner - overhang)
+        let bounds = CGRect(x: 0, y: 0, width: far * 2, height: far * 2)
+        let middle = CGPoint(x: bounds.midX, y: bounds.midY)
+        layer.bounds = bounds
+        for sublayer in [glow, wedge, wedgeMask, bubble] {
+            sublayer.frame = bounds
+        }
+
+        let halfWidth: CGFloat = style.width.map { CGFloat($0) * .pi / 360 } ?? defaultWidth / 2
+        let fade: CGFloat = style.fade.map { CGFloat($0) * .pi / 180 } ?? halfWidth * 0.2
+        let color = style.color?.cgColor ?? NSColor.controlAccentColor.cgColor
+
+        let shape: CGPath
+        switch style.shape {
+        case .wedge:
+            wedgeMask.path = ringPath(in: bounds, width: far - near)
+            // As fractions of a full turn. The two ends can't overlap around the back.
+            let litEnd = halfWidth / (2 * .pi)
+            let fadeEnd = min(0.5, (halfWidth + fade) / (2 * .pi))
+            let unlit = color.copy(alpha: 0) ?? color
+            wedge.colors = [color, color, unlit, unlit, color, color]
+            wedge.locations = [0, litEnd, fadeEnd, 1 - fadeEnd, 1 - litEnd, 1].map { NSNumber(value: Double($0)) }
+
+            // The glow covers it out to the middle of the fade.
+            let glowHalfWidth = min(.pi, halfWidth + fade / 2)
+            let sector = CGMutablePath()
+            sector.addArc(center: middle, radius: far, startAngle: -glowHalfWidth, endAngle: glowHalfWidth, clockwise: false)
+            sector.addArc(center: middle, radius: near, startAngle: glowHalfWidth, endAngle: -glowHalfWidth, clockwise: true)
+            sector.closeSubpath()
+            shape = sector
+        case .bubble:
+            // The arc spans the width, and the rounded ends reach past it.
+            let arc = CGMutablePath()
+            arc.addArc(center: middle, radius: (far + near) / 2, startAngle: -halfWidth, endAngle: halfWidth, clockwise: false)
+            bubble.path = arc
+            bubble.lineWidth = far - near
+            bubble.strokeColor = color
+            shape = arc.copy(strokingWithWidth: far - near, lineCap: .round, lineJoin: .round, miterLimit: 10)
+        }
+        wedge.isHidden = style.shape != .wedge
+        bubble.isHidden = style.shape != .bubble
+
+        // Like CSS's box-shadow: the spread grows the shape, then the blur softens
+        // its edge.
+        let spread = CGFloat(style.glowSpread)
+        glow.isHidden = (spread == 0 && style.glowBlur == 0) || style.glowOpacity == 0
+        glow.shadowPath = spread > 0
+            ? shape.union(shape.copy(strokingWithWidth: spread * 2, lineCap: .round, lineJoin: .round, miterLimit: 10))
+            : shape
+        glow.shadowRadius = CGFloat(style.glowBlur)
+        glow.shadowOpacity = Float(style.glowOpacity)
+        // At full strength, since a translucent highlight would make it faint.
+        glow.shadowColor = color.copy(alpha: 1)
+    }
+
+    func setContentsScale(_ scale: CGFloat) {
+        for sublayer in [layer, glow, wedge, wedgeMask, bubble] {
+            sublayer.contentsScale = scale
+        }
+    }
+}
+
 /// The layers for one app in the ring.
 @MainActor
 private final class ItemLayers {
@@ -261,7 +424,6 @@ private final class ItemLayers {
     private let image: NSImage
 
     let container = CALayer()
-    let halo = CALayer()
     let icon = CALayer()
     private let badge = CALayer()
     private let badgeText = CATextLayer()
@@ -276,15 +438,6 @@ private final class ItemLayers {
         image = item.icon
 
         container.bounds = CGRect(x: 0, y: 0, width: iconSize, height: iconSize)
-
-        let haloSize = iconSize * 1.28
-        halo.bounds = CGRect(x: 0, y: 0, width: haloSize, height: haloSize)
-        halo.position = CGPoint(x: iconSize / 2, y: iconSize / 2)
-        halo.cornerRadius = haloSize / 2
-        halo.backgroundColor = NSColor.controlAccentColor.withAlphaComponent(0.45).cgColor
-        halo.borderColor = NSColor.white.withAlphaComponent(0.7).cgColor
-        halo.borderWidth = 1.5
-        halo.opacity = 0
 
         icon.frame = container.bounds
         icon.contentsGravity = .resizeAspect
@@ -305,7 +458,6 @@ private final class ItemLayers {
         badgeText.truncationMode = .end
         badge.addSublayer(badgeText)
 
-        container.addSublayer(halo)
         container.addSublayer(icon)
         container.addSublayer(badge)
     }
@@ -327,10 +479,10 @@ private final class ItemLayers {
         badgeText.frame = CGRect(x: 0, y: (height - ceil(textSize.height)) / 2, width: width, height: ceil(textSize.height))
     }
 
-    /// Renders the icon at the largest size it's shown at (when highlighted), so
+    /// Renders the icon at the largest size it's shown at, `largestSize`, so
     /// it stays crisp without redrawing during the animation.
-    func rasterize(iconSize: CGFloat, scale: CGFloat) {
-        let pixels = Int((iconSize * 1.25 * scale).rounded(.up))
+    func rasterize(largestSize: CGFloat, scale: CGFloat) {
+        let pixels = Int((largestSize * scale).rounded(.up))
         guard
             let colorSpace = CGColorSpace(name: CGColorSpace.sRGB),
             let context = CGContext(
@@ -355,10 +507,17 @@ private final class ItemLayers {
 
         icon.contents = context.makeImage()
         container.contentsScale = scale
-        halo.contentsScale = scale
         badge.contentsScale = scale
         badgeText.contentsScale = scale
     }
+}
+
+/// A ring filling `bounds`, `width` thick, for the even-odd fill rule.
+private func ringPath(in bounds: CGRect, width: CGFloat) -> CGPath {
+    let path = CGMutablePath()
+    path.addEllipse(in: bounds)
+    path.addEllipse(in: bounds.insetBy(dx: width, dy: width))
+    return path
 }
 
 private func progress(_ elapsed: CFTimeInterval, duration: CFTimeInterval) -> CGFloat {
@@ -375,6 +534,12 @@ private func easeOutBack(_ t: CGFloat) -> CGFloat {
     let c1: CGFloat = 1.3
     let c3 = c1 + 1
     return 1 + c3 * pow(t - 1, 3) + c1 * pow(t - 1, 2)
+}
+
+extension RGBAColor {
+    var cgColor: CGColor {
+        CGColor(srgbRed: red, green: green, blue: blue, alpha: alpha)
+    }
 }
 
 /// Frame-rate independent exponential smoothing towards `target`.
