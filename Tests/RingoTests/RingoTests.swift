@@ -3,7 +3,7 @@ import Carbon.HIToolbox
 import CoreGraphics
 import Testing
 
-@testable import RadialRingMenu
+@testable import Ringo
 
 @Suite struct KeyComboTests {
     @Test func parsesModifiersAndKey() throws {
@@ -357,7 +357,7 @@ import Testing
     }
 
     @Test func loadsCustomIcons() throws {
-        let png = FileManager.default.temporaryDirectory.appending(path: "radial-ring-menu-test-icon.png")
+        let png = FileManager.default.temporaryDirectory.appending(path: "ringo-test-icon.png")
         let rep = NSBitmapImageRep(
             bitmapDataPlanes: nil, pixelsWide: 4, pixelsHigh: 2, bitsPerSample: 8, samplesPerPixel: 4,
             hasAlpha: true, isPlanar: false, colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0
@@ -671,7 +671,7 @@ import Testing
 @MainActor
 @Suite struct StyleEditorTests {
     private func temporaryConfig(_ text: String) throws -> URL {
-        let url = FileManager.default.temporaryDirectory.appending(path: "radial-ring-menu-style-\(UUID().uuidString).toml")
+        let url = FileManager.default.temporaryDirectory.appending(path: "ringo-style-\(UUID().uuidString).toml")
         try text.write(to: url, atomically: true, encoding: .utf8)
         return url
     }
@@ -714,5 +714,40 @@ import Testing
         model.configDidLoad(reloaded, items: [])
         #expect(model.edited.iconSize == 100)
         #expect(model.saved.radius == 150)
+    }
+}
+
+@Suite struct ConfigLocationTests {
+    private func temporaryDirectory() throws -> URL {
+        let url = FileManager.default.temporaryDirectory.appending(path: "ringo-location-\(UUID().uuidString)", directoryHint: .isDirectory)
+        try FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
+        return url
+    }
+
+    private func write(_ path: String, in base: URL) throws {
+        let url = base.appending(path: path)
+        try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try "".write(to: url, atomically: true, encoding: .utf8)
+    }
+
+    @Test func usesTheNewNameByDefault() throws {
+        let base = try temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: base) }
+        #expect(Config.defaultURL(in: base).path.hasSuffix("/ringo/config.toml"))
+    }
+
+    @Test func usesAConfigFromBeforeTheRename() throws {
+        let base = try temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: base) }
+        try write("radial-ring-menu/config.toml", in: base)
+        #expect(Config.defaultURL(in: base).path.hasSuffix("/radial-ring-menu/config.toml"))
+    }
+
+    @Test func prefersTheNewNameWhenBothExist() throws {
+        let base = try temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: base) }
+        try write("radial-ring-menu/config.toml", in: base)
+        try write("ringo/config.toml", in: base)
+        #expect(Config.defaultURL(in: base).path.hasSuffix("/ringo/config.toml"))
     }
 }

@@ -1,5 +1,5 @@
-app := "build/RadialRingMenu.app"
-installed := "/Applications/RadialRingMenu.app"
+app := "build/Ringo.app"
+installed := "/Applications/Ringo.app"
 
 # With only the Command Line Tools installed, swift-testing lives outside the
 # default search paths.
@@ -11,12 +11,12 @@ test_flags := if path_exists(clt_frameworks / "Testing.framework") == "true" {
 default:
     @just --list
 
-# Build build/RadialRingMenu.app
+# Build build/Ringo.app
 app:
     swift build -c release
     rm -rf "{{app}}"
     mkdir -p "{{app}}/Contents/MacOS" "{{app}}/Contents/Resources"
-    cp "$(swift build -c release --show-bin-path)/RadialRingMenu" "{{app}}/Contents/MacOS/"
+    cp "$(swift build -c release --show-bin-path)/Ringo" "{{app}}/Contents/MacOS/"
     cp Support/Info.plist "{{app}}/Contents/Info.plist"
     cp Support/AppIcon.icns "{{app}}/Contents/Resources/AppIcon.icns"
     # A stable identity keeps permissions like Accessibility across rebuilds;
@@ -35,8 +35,8 @@ run: app stop
 
 # Quit the running app, wherever it was started from
 stop:
-    -pkill -x RadialRingMenu
-    for _ in $(seq 50); do pgrep -x RadialRingMenu > /dev/null || exit 0; sleep 0.1; done; echo "RadialRingMenu didn't quit" >&2; exit 1
+    -pkill -x Ringo
+    for _ in $(seq 50); do pgrep -x Ringo > /dev/null || exit 0; sleep 0.1; done; echo "Ringo didn't quit" >&2; exit 1
 
 # Re-render Support/AppIcon.icns after changing Support/AppIcon.svg
 icon:
@@ -47,7 +47,7 @@ test:
 
 # Validate the config and list the apps it resolves to
 check:
-    swift run RadialRingMenu --check
+    swift run Ringo --check
 
 clean:
     rm -rf .build build

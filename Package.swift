@@ -2,19 +2,19 @@
 import PackageDescription
 
 let package = Package(
-    name: "RadialRingMenu",
+    name: "Ringo",
     platforms: [.macOS(.v14)],
     dependencies: [
         .package(url: "https://github.com/dduan/TOMLDecoder", from: "0.4.5"),
     ],
     targets: [
         .executableTarget(
-            name: "RadialRingMenu",
+            name: "Ringo",
             dependencies: ["TOMLDecoder"]
         ),
         .testTarget(
-            name: "RadialRingMenuTests",
-            dependencies: ["RadialRingMenu"]
+            name: "RingoTests",
+            dependencies: ["Ringo"]
         ),
     ]
 )

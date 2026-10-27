@@ -260,7 +260,7 @@ extension Config {
         return value
     }
 
-    /// `$XDG_CONFIG_HOME/radial-ring-menu/config.toml`, falling back to `~/.config`.
+    /// `$XDG_CONFIG_HOME/ringo/config.toml`, falling back to `~/.config`.
     static var defaultURL: URL {
         let base: URL
         if let xdg = ProcessInfo.processInfo.environment["XDG_CONFIG_HOME"], !xdg.isEmpty {
@@ -268,7 +268,20 @@ extension Config {
         } else {
             base = FileManager.default.homeDirectoryForCurrentUser.appending(path: ".config", directoryHint: .isDirectory)
         }
-        return base.appending(path: "radial-ring-menu/config.toml", directoryHint: .notDirectory)
+        return defaultURL(in: base)
+    }
+
+    /// The config in the directory `base`. The app used to be called Radial Ring
+    /// Menu, so a config under that name is used while there isn't one under the
+    /// new name.
+    static func defaultURL(in base: URL) -> URL {
+        let url = base.appending(path: "ringo/config.toml", directoryHint: .notDirectory)
+        let old = base.appending(path: "radial-ring-menu/config.toml", directoryHint: .notDirectory)
+        let fileManager = FileManager.default
+        if !fileManager.fileExists(atPath: url.path) && fileManager.fileExists(atPath: old.path) {
+            return old
+        }
+        return url
     }
 
     /// Reads the config file, writing `template` there first if it doesn't exist.
@@ -290,7 +303,7 @@ extension Config {
     }
 
     static let template = """
-        # Radial Ring Menu
+        # Ringo
         #
         # Hold the hotkey to open the menu around the cursor, flick toward an app and
         # release (or click) to switch to it. Releasing in the middle cancels.

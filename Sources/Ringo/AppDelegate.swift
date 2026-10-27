@@ -140,7 +140,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         let alert = NSAlert()
         alert.alertStyle = .warning
-        alert.messageText = "Problem with the Radial Ring Menu config"
+        alert.messageText = "Problem with the Ringo config"
         alert.informativeText = problems.joined(separator: "\n\n") + "\n\n" + configURL.path
         alert.addButton(withTitle: "OK")
         alert.addButton(withTitle: "Open Config")
@@ -154,7 +154,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func setUpStatusItem() {
         let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
-        item.button?.image = NSImage(systemSymbolName: "circle.circle", accessibilityDescription: "Radial Ring Menu")
+        item.button?.image = NSImage(systemSymbolName: "circle.circle", accessibilityDescription: "Ringo")
 
         let menu = NSMenu()
         hotkeyMenuItem.isEnabled = false
@@ -166,13 +166,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         menu.addItem(withTitle: "Open Config…", action: #selector(openConfig), keyEquivalent: ",").target = self
         menu.addItem(withTitle: "Reload Config", action: #selector(reloadConfigFromMenu), keyEquivalent: "r").target = self
         menu.addItem(.separator())
-        menu.addItem(withTitle: "Quit Radial Ring Menu", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
+        menu.addItem(withTitle: "Quit Ringo", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
         item.menu = menu
         statusItem = item
     }
 
     private static func needsAccessibility(_ feature: String) -> String {
-        "\(feature) needs the Accessibility permission. Allow Radial Ring Menu under System Settings → "
+        "\(feature) needs the Accessibility permission. Allow Ringo under System Settings → "
             + "Privacy & Security → Accessibility, then reload the config."
     }
 
@@ -215,7 +215,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         identifyTimeout?.cancel()
         identifyTimeout = nil
         statusItem?.button?.title = ""
-        statusItem?.button?.image = NSImage(systemSymbolName: "circle.circle", accessibilityDescription: "Radial Ring Menu")
+        statusItem?.button?.image = NSImage(systemSymbolName: "circle.circle", accessibilityDescription: "Ringo")
         statusItem?.length = NSStatusItem.squareLength
     }
 

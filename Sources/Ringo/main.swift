@@ -1,7 +1,7 @@
 import AppKit
 
 let usage = """
-    Usage: RadialRingMenu [--config <path>] [--check] [--preview]
+    Usage: Ringo [--config <path>] [--check] [--preview]
 
       --config <path>  Use this config file instead of \(Config.defaultURL.path)
       --check          Validate the config, list the apps it resolves to and exit

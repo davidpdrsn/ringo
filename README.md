@@ -1,4 +1,4 @@
-# Radial Ring Menu
+# Ringo
 
 A pie-menu app switcher for macOS, in the spirit of Blender's pie menus.
 
@@ -27,9 +27,9 @@ and [just](https://github.com/casey/just).
 just install
 ```
 
-This builds `build/RadialRingMenu.app`, replaces `/Applications/RadialRingMenu.app`
-with it and restarts the app. The app lives in the menu bar. To start it at
-login, add it under System Settings → General → Login Items.
+This builds `build/Ringo.app`, replaces `/Applications/Ringo.app` with it and
+restarts the app. The app lives in the menu bar. To start it at login, add it
+under System Settings → General → Login Items.
 
 The app doesn't need Accessibility or Input Monitoring permission, except to
 stop stray scrolling after a trackpad pick (see Configuration).
@@ -43,8 +43,10 @@ Other recipes:
 
 ## Configuration
 
-The config lives at `~/.config/radial-ring-menu/config.toml`, or under
-`$XDG_CONFIG_HOME` if that's set. A default is written on first launch. Changes
+The config lives at `~/.config/ringo/config.toml`, or under `$XDG_CONFIG_HOME`
+if that's set. A default is written on first launch. Ringo used to be called
+Radial Ring Menu, and a config at the old `radial-ring-menu/config.toml` is
+still used while there isn't one at the new place. Changes
 are picked up when you save. The menu bar menu has *Open Config…* and
 *Preview Menu*, and *Edit Style…* opens a window for trying out the look on a
 live preview and writing it to the config. It only changes the settings you
@@ -173,7 +175,7 @@ cursor otherwise.
 **Menu bar icon**: `show_menu_bar_icon = false` hides the icon. Everything else
 keeps working, and the config is still reloaded when you save it. To reach the
 menu, open the app again while it's running (from Finder, Spotlight or
-`open -a RadialRingMenu`): the icon comes back until the config is next
+`open -a Ringo`): the icon comes back until the config is next
 reloaded.
 
 **Apps**: each entry needs a `name`, `bundle_id`, `path` or `process`.
@@ -207,7 +209,7 @@ softens that edge.
 ## Command line
 
 ```
-RadialRingMenu [--config <path>] [--check] [--preview]
+Ringo [--config <path>] [--check] [--preview]
 ```
 
 `--check` validates the config and exits. `--preview` opens the menu as soon as

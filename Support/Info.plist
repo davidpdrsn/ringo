@@ -5,17 +5,17 @@
 	<key>CFBundleDevelopmentRegion</key>
 	<string>en</string>
 	<key>CFBundleDisplayName</key>
-	<string>Radial Ring Menu</string>
+	<string>Ringo</string>
 	<key>CFBundleIconFile</key>
 	<string>AppIcon</string>
 	<key>CFBundleExecutable</key>
-	<string>RadialRingMenu</string>
+	<string>Ringo</string>
 	<key>CFBundleIdentifier</key>
-	<string>com.davidpdrsn.RadialRingMenu</string>
+	<string>com.davidpdrsn.Ringo</string>
 	<key>CFBundleInfoDictionaryVersion</key>
 	<string>6.0</string>
 	<key>CFBundleName</key>
-	<string>Radial Ring Menu</string>
+	<string>Ringo</string>
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
