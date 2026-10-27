@@ -37,6 +37,7 @@ final class RadialMenuController: NSObject {
     private var iconSize: CGFloat = 0
     private var moveCursorToWindow = true
     private let cursorMover = CursorMover()
+    private let cursorHider = CursorHider()
 
     private let panel = RadialMenuPanel()
     private let menuView = RadialMenuView()
@@ -131,6 +132,7 @@ final class RadialMenuController: NSObject {
 
         // Don't move the cursor from under the menu if the last switch is still waiting.
         cursorMover.cancel()
+        cursorHider.show()
 
         let mouse = NSEvent.mouseLocation
         let screen = NSScreen.screens.first { NSMouseInRect(mouse, $0.frame, false) } ?? NSScreen.main
@@ -213,7 +215,7 @@ final class RadialMenuController: NSObject {
                 }
                 guard let pid = app?.processIdentifier else { return }
                 DispatchQueue.main.async {
-                    MainActor.assumeIsolated { self?.moveCursor(toWindowOf: pid) }
+                    MainActor.assumeIsolated { self?.switched(to: item, pid: pid) }
                 }
             }
         case .process:
@@ -226,14 +228,19 @@ final class RadialMenuController: NSObject {
             NSApp.activate()
             NSApp.yieldActivation(to: app)
             app.activate(from: .current, options: [])
-            moveCursor(toWindowOf: app.processIdentifier)
+            switched(to: item, pid: app.processIdentifier)
         }
     }
 
-    private func moveCursor(toWindowOf pid: pid_t) {
+    private func switched(to item: MenuItem, pid: pid_t) {
         // The menu may have opened again while the app was launching.
-        guard moveCursorToWindow, !isOpen else { return }
-        cursorMover.moveCursor(toFrontWindowOf: pid)
+        guard !isOpen else { return }
+        if item.hideCursor {
+            cursorHider.hide(while: pid)
+        }
+        if moveCursorToWindow {
+            cursorMover.moveCursor(toFrontWindowOf: pid)
+        }
     }
 
     // MARK: - Tracking

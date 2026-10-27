@@ -34,6 +34,8 @@ struct AppSpec: Equatable {
     var process: String?
     /// An image file or app to take the icon from, instead of the app's own.
     var icon: String?
+    /// Hides the cursor after switching to the app, until the mouse moves.
+    var hideCursor = false
 }
 
 enum ConfigError: Error, CustomStringConvertible {
@@ -177,7 +179,8 @@ extension Config {
         # that isn't an app bundle (e.g. started with `cargo run`), use
         # `process = "<process name>"`; it can be switched to but not launched.
         # Any entry can set `icon` to an image file (PNG, ICNS, ...) or an app to
-        # use instead of its own icon.
+        # use instead of its own icon, and `hide_cursor = true` to hide the cursor
+        # after switching to it, until the mouse moves.
 
         [[apps]]
         name = "Finder"
@@ -250,6 +253,7 @@ extension AppSpec: Decodable {
         case path
         case process
         case icon
+        case hideCursor = "hide_cursor"
     }
 
     init(from decoder: any Decoder) throws {
@@ -260,6 +264,7 @@ extension AppSpec: Decodable {
         path = try container.decodeIfPresent(String.self, forKey: .path)
         process = try container.decodeIfPresent(String.self, forKey: .process)
         icon = try container.decodeIfPresent(String.self, forKey: .icon)
+        hideCursor = try container.decodeIfPresent(Bool.self, forKey: .hideCursor) ?? false
     }
 }
 

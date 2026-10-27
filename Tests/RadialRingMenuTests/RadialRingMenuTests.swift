@@ -173,6 +173,19 @@ import Testing
         #expect(config.apps == [AppSpec(name: "GitButler", process: "gitbutler-gpui", icon: "~/icon.png")])
     }
 
+    @Test func parsesHideCursor() throws {
+        let config = try Config.parse("""
+            [[apps]]
+            name = "Ghostty"
+            hide_cursor = true
+
+            [[apps]]
+            name = "Safari"
+            """)
+        #expect(config.apps == [AppSpec(name: "Ghostty", hideCursor: true), AppSpec(name: "Safari")])
+        #expect(throws: ConfigError.self) { try Config.parse("[[apps]]\nname = \"Ghostty\"\nhide_cursor = \"yes\"") }
+    }
+
     @Test func rejectsEmptyAppEntries() {
         #expect(throws: ConfigError.self) { try Config.parse("[[apps]]\nname = \"Safari\"\n\n[[apps]]\n") }
     }
@@ -202,6 +215,12 @@ import Testing
     @Test func usesNameAsProcessLabel() throws {
         let item = try AppResolver.resolve(AppSpec(name: "GitButler", process: "gitbutler-gpui"))
         #expect(item.title == "GitButler")
+    }
+
+    @Test func carriesHideCursor() throws {
+        #expect(try AppResolver.resolve(AppSpec(process: "some-process", hideCursor: true)).hideCursor)
+        #expect(try AppResolver.resolve(AppSpec(path: "/System/Applications/Calculator.app", hideCursor: true)).hideCursor)
+        #expect(try !AppResolver.resolve(AppSpec(process: "some-process")).hideCursor)
     }
 
     @Test func loadsCustomIcons() throws {

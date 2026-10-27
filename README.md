@@ -65,6 +65,10 @@ name = "Some App"
 [[apps]]
 process = "my-app"               # a running executable that isn't an .app
 icon = "~/code/my-app/icon.icns" # any entry can override its icon
+
+[[apps]]
+name = "Ghostty"
+hide_cursor = true               # hide the cursor after switching to it
 ```
 
 **Hotkey**: modifiers `cmd`, `shift`, `option` (or `alt`) and `ctrl`, plus one
@@ -111,6 +115,12 @@ again after every `just install`.
 window, once the app is in front. Set `move_cursor_to_window = false` to leave it
 where it is. It also stays put if you move the mouse before the window shows
 up, or if no window does within a couple of seconds.
+
+Set `hide_cursor = true` on an app to hide the cursor after switching to it,
+handy for a terminal where you only type. It comes back when you move the mouse
+or click, when another app comes to the front, or when the menu opens. This uses
+a private WindowServer setting, since apps in the background can't hide the
+cursor otherwise.
 
 **Menu bar icon**: `show_menu_bar_icon = false` hides the icon. Everything else
 keeps working, and the config is still reloaded when you save it. To reach the

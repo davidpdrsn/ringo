@@ -15,6 +15,8 @@ struct MenuItem {
     var title: String
     var target: Target
     var icon: NSImage
+    /// Hides the cursor after switching to the app, until the mouse moves.
+    var hideCursor = false
 
     func runningApplication(in apps: [NSRunningApplication]) -> NSRunningApplication? {
         switch target {
@@ -48,7 +50,8 @@ enum AppResolver {
             return MenuItem(
                 title: spec.name ?? process,
                 target: .process(name: process),
-                icon: customIcon ?? NSWorkspace.shared.icon(for: .unixExecutable)
+                icon: customIcon ?? NSWorkspace.shared.icon(for: .unixExecutable),
+                hideCursor: spec.hideCursor
             )
         }
 
@@ -69,7 +72,8 @@ enum AppResolver {
         return MenuItem(
             title: title,
             target: .app(url: url, bundleID: bundleID),
-            icon: customIcon ?? NSWorkspace.shared.icon(forFile: url.path)
+            icon: customIcon ?? NSWorkspace.shared.icon(forFile: url.path),
+            hideCursor: spec.hideCursor
         )
     }
 
