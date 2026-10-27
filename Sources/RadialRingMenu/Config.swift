@@ -11,6 +11,9 @@ struct Config: Equatable {
     var selectedIconScale: Double
     /// How opaque the other apps' icons are while one is selected.
     var unselectedIconOpacity: Double
+    /// How big the other apps' icons are while one is selected, as a fraction of
+    /// their size.
+    var unselectedIconScale: Double
     /// How long icons take to fan out when the menu opens, in seconds.
     var openAnimationDuration: Double
     var outerRing: OuterRing
@@ -29,6 +32,7 @@ struct Config: Equatable {
     static let defaultIconSize = 64.0
     static let defaultSelectedIconScale = 1.22
     static let defaultUnselectedIconOpacity = 0.55
+    static let defaultUnselectedIconScale = 1.0
     static let defaultOpenAnimationMs = 180.0
     /// By default the outer ring reaches this fraction of the icon size to either
     /// side of `radius`. Less than a half, so the icons stick out past its edges.
@@ -181,6 +185,8 @@ extension Config {
             ?? defaultSelectedIconScale
         let unselectedIconOpacity = try checked(raw.icons?.unselectedOpacity, in: 0...1, key: "icons.unselected_opacity")
             ?? defaultUnselectedIconOpacity
+        let unselectedIconScale = try checked(raw.icons?.unselectedScale, in: 0.2...1, key: "icons.unselected_scale")
+            ?? defaultUnselectedIconScale
 
         let openAnimationMs = raw.openAnimationMs ?? defaultOpenAnimationMs
         guard (0...1000).contains(openAnimationMs) else {
@@ -225,6 +231,7 @@ extension Config {
             iconSize: iconSize,
             selectedIconScale: selectedIconScale,
             unselectedIconOpacity: unselectedIconOpacity,
+            unselectedIconScale: unselectedIconScale,
             openAnimationDuration: openAnimationMs / 1000,
             outerRing: outerRing,
             innerRing: innerRing,
@@ -325,10 +332,12 @@ extension Config {
         [icons]
         radius = 110
         size = 64
-        # How much bigger the selected app's icon gets, and how opaque the others
-        # are while one is selected, from 0 to 1.
+        # How much bigger the selected app's icon gets. And while one is selected,
+        # how opaque the others are, from 0 to 1, and how big, as a fraction of
+        # their size.
         # selected_scale = 1.22
         # unselected_opacity = 0.55
+        # unselected_scale = 1
 
         # Colors below are "#RRGGBB", or "#RRGGBBAA" where the last two digits are
         # the opacity.
@@ -468,12 +477,14 @@ private struct RawIcons: Decodable {
     var size: Double?
     var selectedScale: Double?
     var unselectedOpacity: Double?
+    var unselectedScale: Double?
 
     enum CodingKeys: String, CodingKey, CaseIterable {
         case radius
         case size
         case selectedScale = "selected_scale"
         case unselectedOpacity = "unselected_opacity"
+        case unselectedScale = "unselected_scale"
     }
 
     init(from decoder: any Decoder) throws {
@@ -483,6 +494,7 @@ private struct RawIcons: Decodable {
         size = try container.decodeNumberIfPresent(forKey: .size)
         selectedScale = try container.decodeNumberIfPresent(forKey: .selectedScale)
         unselectedOpacity = try container.decodeNumberIfPresent(forKey: .unselectedOpacity)
+        unselectedScale = try container.decodeNumberIfPresent(forKey: .unselectedScale)
     }
 }
 

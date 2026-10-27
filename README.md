@@ -58,6 +58,7 @@ radius = 110
 size = 64
 selected_scale = 1.22     # how much bigger the selected app's icon gets
 unselected_opacity = 0.55 # how opaque the others are while one is selected
+unselected_scale = 1      # and how big, as a fraction of their size (0.2 to 1)
 
 # Colors are "#RRGGBB", or "#RRGGBBAA" where the last two digits are the opacity.
 

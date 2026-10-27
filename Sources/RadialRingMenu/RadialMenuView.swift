@@ -20,6 +20,7 @@ final class RadialMenuView: NSView {
     private var iconSize: CGFloat = 64
     private var selectedIconScale: CGFloat = 1.22
     private var unselectedIconOpacity: CGFloat = 0.55
+    private var unselectedIconScale: CGFloat = 1
     private var openDuration: CFTimeInterval = 0.18
     private var backdropOuterRadius: CGFloat = 0
     /// The edges the backdrop's mask was made for.
@@ -137,6 +138,7 @@ final class RadialMenuView: NSView {
     func applyStyle(_ config: Config) {
         openDuration = config.openAnimationDuration
         unselectedIconOpacity = config.unselectedIconOpacity
+        unselectedIconScale = config.unselectedIconScale
 
         // Keep the backdrop around the icons when the layout grew the radius to
         // fit them.
@@ -206,7 +208,7 @@ final class RadialMenuView: NSView {
         }
         for (item, badge) in zip(itemLayers, badges) {
             item.highlight = 0
-            item.emphasis = 1
+            item.recede = 0
             item.setBadge(badge, iconSize: iconSize)
         }
         centerRing.position = center
@@ -225,7 +227,7 @@ final class RadialMenuView: NSView {
         labelOpacity = selection == nil ? 0 : 1
         for (index, item) in itemLayers.enumerated() {
             item.highlight = index == selection ? 1 : 0
-            item.emphasis = selection == nil || index == selection ? 1 : unselectedIconOpacity
+            item.recede = selection != nil && index != selection ? 1 : 0
         }
     }
 
@@ -262,11 +264,13 @@ final class RadialMenuView: NSView {
             item.container.position = CGPoint(x: center.x + offset.x * travel, y: center.y + offset.y * travel)
 
             approach(&item.highlight, index == selection ? 1 : 0, rate: 24, dt: dt)
-            approach(&item.emphasis, selection == nil || index == selection ? 1 : unselectedIconOpacity, rate: 18, dt: dt)
+            approach(&item.recede, selection != nil && index != selection ? 1 : 0, rate: 18, dt: dt)
 
-            let scale = (0.2 + 0.8 * easeOutCubic(t)) * (1 + (selectedIconScale - 1) * item.highlight)
+            let selected = 1 + (selectedIconScale - 1) * item.highlight
+            let receded = 1 + (unselectedIconScale - 1) * item.recede
+            let scale = (0.2 + 0.8 * easeOutCubic(t)) * selected * receded
             item.container.transform = CATransform3DMakeScale(scale, scale, 1)
-            item.container.opacity = Float(min(1, t * 2.5) * item.emphasis)
+            item.container.opacity = Float(min(1, t * 2.5) * (1 - (1 - unselectedIconOpacity) * item.recede))
         }
 
         let pointerVisible = hypot(offset.x, offset.y) >= layout.deadZone * 0.5
@@ -430,8 +434,8 @@ private final class ItemLayers {
 
     /// 0...1, how selected the item looks.
     var highlight: CGFloat = 0
-    /// 0...1, dims the other items while one is selected.
-    var emphasis: CGFloat = 1
+    /// 0...1, how far it has dimmed and shrunk while another item is selected.
+    var recede: CGFloat = 0
 
     init(item: MenuItem, iconSize: CGFloat) {
         title = item.title

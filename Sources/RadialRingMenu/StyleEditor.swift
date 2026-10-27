@@ -124,6 +124,7 @@ private struct StyleEditorView: View {
                         NumberSlider("Size", value: $model.edited.iconSize, in: 16...200, step: 1, unit: "pt")
                         NumberSlider("Selected size", value: $model.edited.selectedIconScale, in: 0.5...3, step: 0.01, unit: "×")
                         NumberSlider("Others' opacity", value: $model.edited.unselectedIconOpacity, in: 0...1, step: 0.05, unit: "")
+                        NumberSlider("Others' size", value: $model.edited.unselectedIconScale, in: 0.2...1, step: 0.01, unit: "×")
                         NumberSlider("Open animation", value: openAnimationMs, in: 0...1000, step: 5, unit: "ms")
                     }
                     Section("Outer ring") {

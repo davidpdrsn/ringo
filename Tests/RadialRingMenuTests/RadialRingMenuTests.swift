@@ -178,15 +178,19 @@ import Testing
     }
 
     @Test func parsesSelectedAndUnselectedIcons() throws {
-        let config = try Config.parse("[icons]\nselected_scale = 1.5\nunselected_opacity = 0.3")
+        let config = try Config.parse("[icons]\nselected_scale = 1.5\nunselected_opacity = 0.3\nunselected_scale = 0.8")
         #expect(config.selectedIconScale == 1.5)
         #expect(config.unselectedIconOpacity == 0.3)
+        #expect(config.unselectedIconScale == 0.8)
         let defaults = try Config.parse("")
         #expect(defaults.selectedIconScale == Config.defaultSelectedIconScale)
         #expect(defaults.unselectedIconOpacity == Config.defaultUnselectedIconOpacity)
+        #expect(defaults.unselectedIconScale == 1)
         #expect(throws: ConfigError.self) { try Config.parse("[icons]\nselected_scale = 0.2") }
         #expect(throws: ConfigError.self) { try Config.parse("[icons]\nselected_scale = 4") }
         #expect(throws: ConfigError.self) { try Config.parse("[icons]\nunselected_opacity = 1.5") }
+        #expect(throws: ConfigError.self) { try Config.parse("[icons]\nunselected_scale = 0.1") }
+        #expect(throws: ConfigError.self) { try Config.parse("[icons]\nunselected_scale = 1.5") }
     }
 
     @Test func pointsMovedSettingsToTheirNewPlace() {

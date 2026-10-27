@@ -141,6 +141,7 @@ extension Config {
             ConfigEdit(table: "icons", key: "size", value: number(iconSize)),
             ConfigEdit(table: "icons", key: "selected_scale", value: number(selectedIconScale)),
             ConfigEdit(table: "icons", key: "unselected_opacity", value: number(unselectedIconOpacity)),
+            ConfigEdit(table: "icons", key: "unselected_scale", value: number(unselectedIconScale)),
             ConfigEdit(table: "outer_ring", key: "inner_radius", value: number(outerRing.innerRadius)),
             ConfigEdit(table: "outer_ring", key: "outer_radius", value: number(outerRing.outerRadius)),
             ConfigEdit(table: "outer_ring", key: "color", value: color(outerRing.color)),
