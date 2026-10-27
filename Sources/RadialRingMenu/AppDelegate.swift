@@ -10,6 +10,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let hotkeyMenuItem = NSMenuItem(title: "", action: nil, keyEquivalent: "")
     private var hotKey: (any HotKeyHandle)?
     private var registeredHotkey: Hotkey?
+    private var trackpadMonitor: TrackpadMonitor?
     private var watcher: ConfigWatcher?
 
     /// The config text last applied, so saves that don't change anything are skipped.
@@ -74,6 +75,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 registeredHotkey = config.hotkey
             } catch {
                 problems.append(error.description)
+            }
+        }
+
+        if trackpadMonitor?.fingers != config.trackpadFingers {
+            trackpadMonitor?.stop()
+            trackpadMonitor = nil
+            if let fingers = config.trackpadFingers {
+                do {
+                    trackpadMonitor = try TrackpadMonitor(fingers: fingers) { [weak self] event in
+                        self?.controller.handle(event)
+                    }
+                } catch {
+                    problems.append(error.description)
+                }
             }
         }
 

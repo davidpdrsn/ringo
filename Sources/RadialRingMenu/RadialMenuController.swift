@@ -12,6 +12,9 @@ import QuartzCore
 /// - With a modifier-only hotkey, typing a key or pressing another modifier
 ///   while holding it cancels, since that's someone typing ⌥E or using a
 ///   shortcut rather than reaching for the menu.
+/// - Resting fingers on the trackpad (`trackpad_fingers`) works the same way:
+///   moving them picks a direction, lifting them switches, and adding a finger
+///   cancels.
 @MainActor
 final class RadialMenuController: NSObject {
     private enum Phase {
@@ -20,6 +23,8 @@ final class RadialMenuController: NSObject {
         case holding(openedAt: CFTimeInterval)
         /// Opened without the hotkey (Preview Menu); stays until a click or Escape.
         case sticky
+        /// Opened by fingers on the trackpad; lifting them decides.
+        case trackpad
     }
 
     private var phase = Phase.closed
@@ -34,6 +39,10 @@ final class RadialMenuController: NSObject {
     private var escapeHotKey: HotKeyRegistration?
     /// The menu's center in global AppKit screen coordinates.
     private var center: CGPoint = .zero
+    /// How far the fingers have moved, standing in for the cursor in `.trackpad`.
+    private var trackpadOffset: CGPoint = .zero
+    /// Takes the panel off screen once the ring has faded out.
+    private var pendingHide: DispatchWorkItem?
 
     var isOpen: Bool {
         if case .closed = phase { false } else { true }
@@ -59,13 +68,31 @@ final class RadialMenuController: NSObject {
     func handle(_ event: HotKeyCenter.Event) {
         switch (event, phase) {
         case (.pressed, .closed):
-            open(sticky: false)
+            open(.holding(openedAt: CACurrentMediaTime()))
         case (.pressed, .sticky):
             close()
         case (.released, .holding):
             triggerReleased()
-        case (.pressed, .holding), (.released, _):
-            // Key repeat, or a release with nothing held open.
+        case (.pressed, .holding), (.pressed, .trackpad), (.released, _):
+            // Key repeat, the trackpad already has the menu open, or a release
+            // with nothing held open.
+            break
+        }
+    }
+
+    func handle(_ event: TrackpadGesture.Event) {
+        switch (event, phase) {
+        case (.began, .closed):
+            trackpadOffset = .zero
+            open(.trackpad)
+        case (.moved(let offset), .trackpad):
+            trackpadOffset = offset
+        case (.ended, .trackpad):
+            close(activating: layout.selection(for: trackpadOffset).map { items[$0] })
+        case (.cancelled, .trackpad):
+            close()
+        default:
+            // The hotkey already has the menu open.
             break
         }
     }
@@ -73,12 +100,12 @@ final class RadialMenuController: NSObject {
     /// Opens the menu without the hotkey held, e.g. for `--preview`.
     func openSticky() {
         guard !isOpen else { return }
-        open(sticky: true)
+        open(.sticky)
     }
 
     // MARK: - Opening and closing
 
-    private func open(sticky: Bool) {
+    private func open(_ phase: Phase) {
         guard !items.isEmpty else {
             NSSound.beep()
             return
@@ -93,11 +120,13 @@ final class RadialMenuController: NSObject {
             warpCursor(to: center)
         }
 
+        pendingHide?.cancel()
+        pendingHide = nil
         panel.setFrame(screen.frame, display: false)
         // Through the animator, to cancel a fade-out still running from the last close.
         NSAnimationContext.runAnimationGroup { context in
             context.duration = 0
-            panel.animator().alphaValue = 1
+            menuView.animator().alphaValue = 1
         }
         panel.orderFrontRegardless()
         NSCursor.arrow.set()
@@ -109,13 +138,11 @@ final class RadialMenuController: NSObject {
         link.add(to: .main, forMode: .common)
         displayLink = link
 
-        if sticky {
-            phase = .sticky
+        self.phase = phase
+        if case .sticky = phase {
             escapeHotKey = try? HotKeyCenter.shared.register(KeyCombo(parsing: "escape")) { [weak self] event in
                 if event == .pressed { self?.close() }
             }
-        } else {
-            phase = .holding(openedAt: now)
         }
     }
 
@@ -129,17 +156,25 @@ final class RadialMenuController: NSObject {
 
         NSAnimationContext.runAnimationGroup { context in
             context.duration = 0.1
-            panel.animator().alphaValue = 0
-        } completionHandler: { [weak self] in
+            menuView.animator().alphaValue = 0
+        }
+        hidePanel(after: 0.1)
+
+        if let item {
+            activate(item)
+        }
+    }
+
+    private func hidePanel(after delay: TimeInterval) {
+        pendingHide?.cancel()
+        let work = DispatchWorkItem { [weak self] in
             MainActor.assumeIsolated {
                 guard let self, !self.isOpen else { return }
                 self.panel.orderOut(nil)
             }
         }
-
-        if let item {
-            activate(item)
-        }
+        pendingHide = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: work)
     }
 
     private func activate(_ item: MenuItem) {
@@ -182,7 +217,7 @@ final class RadialMenuController: NSObject {
             }
         }
 
-        let offset = cursorOffset()
+        let offset = pointerOffset()
         menuView.update(time: link.targetTimestamp, selection: layout.selection(for: offset), pointer: offset)
     }
 
@@ -191,7 +226,7 @@ final class RadialMenuController: NSObject {
         if wasUsedForTyping(since: openedAt) {
             close()
         } else {
-            close(activating: layout.selection(for: cursorOffset()).map { items[$0] })
+            close(activating: layout.selection(for: pointerOffset()).map { items[$0] })
         }
     }
 
@@ -211,7 +246,7 @@ final class RadialMenuController: NSObject {
         guard isOpen else { return }
         switch button {
         case .left:
-            close(activating: layout.selection(for: cursorOffset()).map { items[$0] })
+            close(activating: layout.selection(for: pointerOffset()).map { items[$0] })
         case .right:
             close()
         }
@@ -219,7 +254,11 @@ final class RadialMenuController: NSObject {
 
     // MARK: - Geometry
 
-    private func cursorOffset() -> CGPoint {
+    /// Where the user is pointing, relative to the menu's center.
+    private func pointerOffset() -> CGPoint {
+        if case .trackpad = phase {
+            return trackpadOffset
+        }
         let mouse = NSEvent.mouseLocation
         return CGPoint(x: mouse.x - center.x, y: mouse.y - center.y)
     }

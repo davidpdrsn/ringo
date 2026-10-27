@@ -7,6 +7,8 @@ struct Config: Equatable {
     /// Distance from the center of the menu to the center of each icon, in points.
     var radius: Double
     var iconSize: Double
+    /// Opens the menu when this many fingers rest on the trackpad. `nil` is off.
+    var trackpadFingers: Int?
     var apps: [AppSpec]
 
     static let defaultHotkey = "option+space"
@@ -74,7 +76,18 @@ extension Config {
             throw .invalid("apps[\(index)] needs a `name`, `bundle_id`, `path` or `process`")
         }
 
-        return Config(hotkey: hotkey, radius: radius, iconSize: iconSize, apps: apps)
+        if let fingers = raw.trackpadFingers, !(3...5).contains(fingers) {
+            // Fewer would fire on every scroll.
+            throw .invalid("trackpad_fingers must be 3, 4 or 5")
+        }
+
+        return Config(
+            hotkey: hotkey,
+            radius: radius,
+            iconSize: iconSize,
+            trackpadFingers: raw.trackpadFingers,
+            apps: apps
+        )
     }
 
     /// `$XDG_CONFIG_HOME/radial-ring-menu/config.toml`, falling back to `~/.config`.
@@ -124,6 +137,14 @@ extension Config {
         radius = 110
         icon_size = 64
 
+        # Also open the menu by resting this many fingers (3-5) on the trackpad.
+        # Slide them toward an app and lift to switch; adding a finger cancels.
+        # System gestures with the same number of fingers still fire, so you may
+        # want to move those to another count in System Settings → Trackpad.
+        # Grant the Accessibility permission so the fingers' movement doesn't also
+        # scroll the app you switch to.
+        # trackpad_fingers = 3
+
         # Apps are laid out clockwise starting at the top.
         # Each entry needs a `name`, `bundle_id` or `path`. A `name` alone is looked
         # up in /Applications and the system app folders. For a running executable
@@ -165,12 +186,14 @@ private struct RawConfig: Decodable {
     var hotkey: String?
     var radius: Double?
     var iconSize: Double?
+    var trackpadFingers: Int?
     var apps: [AppSpec]?
 
     enum CodingKeys: String, CodingKey, CaseIterable {
         case hotkey
         case radius
         case iconSize = "icon_size"
+        case trackpadFingers = "trackpad_fingers"
         case apps
     }
 
@@ -180,6 +203,7 @@ private struct RawConfig: Decodable {
         hotkey = try container.decodeIfPresent(String.self, forKey: .hotkey)
         radius = try container.decodeNumberIfPresent(forKey: .radius)
         iconSize = try container.decodeNumberIfPresent(forKey: .iconSize)
+        trackpadFingers = try container.decodeIfPresent(Int.self, forKey: .trackpadFingers)
         apps = try container.decodeIfPresent([AppSpec].self, forKey: .apps)
     }
 }

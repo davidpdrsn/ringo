@@ -234,3 +234,132 @@ import Testing
         #expect(throws: AppResolutionError.self) { try AppResolver.resolve(AppSpec(path: "/bin/ls")) }
     }
 }
+
+@Suite struct TrackpadGestureTests {
+    let surface = CGSize(width: 100, height: 50)
+
+    func frame(_ fingers: Int, at centroid: CGPoint = CGPoint(x: 0.5, y: 0.5), device: UInt = 1) -> TouchFrame {
+        TouchFrame(device: device, fingers: fingers, centroid: centroid)
+    }
+
+    @Test func matchesMultitouchSupportsLayout() {
+        #expect(MemoryLayout<MTTouch>.size == 96)
+        #expect(MemoryLayout<MTTouch>.offset(of: \.timestamp) == 8)
+        #expect(MemoryLayout<MTTouch>.offset(of: \.normalized) == 32)
+        #expect(MemoryLayout<MTTouch>.offset(of: \.absolute) == 68)
+        #expect(MemoryLayout<MTTouch>.offset(of: \.zDensity) == 92)
+    }
+
+    @Test func beginsAfterSettlingMovesAndEnds() {
+        var gesture = TrackpadGesture(fingers: 3)
+        #expect(gesture.process(frame(1), surfaceSize: surface, at: 0).isEmpty)
+        #expect(gesture.process(frame(3), surfaceSize: surface, at: 0.01).isEmpty)
+        #expect(gesture.process(frame(3), surfaceSize: surface, at: 0.03).isEmpty)
+        #expect(gesture.process(frame(3), surfaceSize: surface, at: 0.07) == [.began, .moved(.zero)])
+
+        // 0.1 of a 100 mm wide surface to the right, 0.2 of 50 mm up: 10 mm and 10 mm.
+        let moved = gesture.process(frame(3, at: CGPoint(x: 0.6, y: 0.7)), surfaceSize: surface, at: 0.1)
+        let points = 10 * TrackpadGesture.pointsPerMillimeter
+        guard case .moved(let offset) = moved.first else {
+            Issue.record("expected a move, got \(moved)")
+            return
+        }
+        #expect(abs(offset.x - points) < 0.01 && abs(offset.y - points) < 0.01)
+
+        #expect(gesture.process(frame(2), surfaceSize: surface, at: 0.2) == [.ended])
+        // Lifting the rest doesn't start anything new.
+        #expect(gesture.process(frame(1), surfaceSize: surface, at: 0.21).isEmpty)
+        #expect(gesture.process(frame(0), surfaceSize: surface, at: 0.22).isEmpty)
+    }
+
+    @Test func passingThroughOnTheWayToMoreFingersDoesNothing() {
+        var gesture = TrackpadGesture(fingers: 3)
+        _ = gesture.process(frame(3), surfaceSize: surface, at: 0)
+        #expect(gesture.process(frame(4), surfaceSize: surface, at: 0.02).isEmpty)
+        // Still blocked when lifting back down through three.
+        #expect(gesture.process(frame(3), surfaceSize: surface, at: 0.5).isEmpty)
+        #expect(gesture.process(frame(3), surfaceSize: surface, at: 0.6).isEmpty)
+        #expect(gesture.process(frame(0), surfaceSize: surface, at: 0.7).isEmpty)
+        // And works again once all fingers are up.
+        _ = gesture.process(frame(3), surfaceSize: surface, at: 1)
+        #expect(gesture.process(frame(3), surfaceSize: surface, at: 1.1).first == .began)
+    }
+
+    @Test func addingAFingerCancels() {
+        var gesture = TrackpadGesture(fingers: 3)
+        _ = gesture.process(frame(3), surfaceSize: surface, at: 0)
+        _ = gesture.process(frame(3), surfaceSize: surface, at: 0.1)
+        #expect(gesture.process(frame(4), surfaceSize: surface, at: 0.2) == [.cancelled])
+    }
+
+    @Test func ignoresOtherTrackpadsWhileActive() {
+        var gesture = TrackpadGesture(fingers: 3)
+        _ = gesture.process(frame(3, device: 1), surfaceSize: surface, at: 0)
+        _ = gesture.process(frame(3, device: 1), surfaceSize: surface, at: 0.1)
+        #expect(gesture.process(frame(0, device: 2), surfaceSize: surface, at: 0.2).isEmpty)
+        #expect(gesture.process(frame(0, device: 1), surfaceSize: surface, at: 0.3) == [.ended])
+    }
+
+    @Test func parsesTrackpadFingers() throws {
+        #expect(try Config.parse("trackpad_fingers = 3").trackpadFingers == 3)
+        #expect(try Config.parse("").trackpadFingers == nil)
+        #expect(throws: ConfigError.self) { try Config.parse("trackpad_fingers = 2") }
+    }
+}
+
+@Suite struct ScrollSuppressionTests {
+    @Test func dropsNothingWhenOff() {
+        var suppression = ScrollSuppression()
+        #expect(suppression.shouldDrop(scrollAt: 0) == false)
+    }
+
+    @Test func dropsDuringTheGestureAndWhileLifting() {
+        var suppression = ScrollSuppression()
+        suppression.gestureBegan()
+        #expect(suppression.shouldDrop(scrollAt: 0) == true)
+        suppression.gestureEnded(at: 1)
+        suppression.fingersChanged(to: 2, at: 1.1)
+        #expect(suppression.shouldDrop(scrollAt: 1.5) == true)
+    }
+
+    @Test func dropsCoastingUntilItGoesQuiet() {
+        var suppression = ScrollSuppression()
+        suppression.gestureBegan()
+        suppression.gestureEnded(at: 1)
+        // Lifting took longer than the quiet period; coasting starts from the lift.
+        suppression.fingersChanged(to: 0, at: 1.5)
+        #expect(suppression.shouldDrop(scrollAt: 1.52) == true)
+        #expect(suppression.shouldDrop(scrollAt: 1.6) == true)
+        #expect(suppression.shouldDrop(scrollAt: 1.7) == true)
+        #expect(suppression.shouldDrop(scrollAt: 2.0) == false)
+        #expect(!suppression.isActive)
+    }
+
+    @Test func touchingAgainStopsDropping() {
+        var suppression = ScrollSuppression()
+        suppression.gestureBegan()
+        suppression.gestureEnded(at: 1)
+        suppression.fingersChanged(to: 0, at: 1)
+        suppression.fingersChanged(to: 2, at: 1.05)
+        #expect(!suppression.isActive)
+        #expect(suppression.shouldDrop(scrollAt: 1.06) == false)
+    }
+
+    @Test func givesUpAfterTheMaximum() {
+        var suppression = ScrollSuppression()
+        suppression.gestureBegan()
+        suppression.gestureEnded(at: 0)
+        suppression.fingersChanged(to: 0, at: 0)
+        var time = 0.0
+        while time < ScrollSuppression.maximumDuration - 0.1 {
+            time += 0.05
+            #expect(suppression.shouldDrop(scrollAt: time) == true)
+        }
+        #expect(suppression.shouldDrop(scrollAt: ScrollSuppression.maximumDuration + 0.01) == false)
+
+        var lifting = ScrollSuppression()
+        lifting.gestureBegan()
+        lifting.gestureEnded(at: 0)
+        #expect(lifting.shouldDrop(scrollAt: ScrollSuppression.maximumDuration + 0.01) == false)
+    }
+}

@@ -18,7 +18,9 @@ app:
     mkdir -p "{{app}}/Contents/MacOS"
     cp "$(swift build -c release --show-bin-path)/RadialRingMenu" "{{app}}/Contents/MacOS/"
     cp Support/Info.plist "{{app}}/Contents/Info.plist"
-    codesign --force --sign - "{{app}}"
+    # A stable identity keeps permissions like Accessibility across rebuilds;
+    # ad-hoc signing makes every build look like a new app to macOS.
+    identity="$(security find-identity -v -p codesigning | grep -o '"Apple Development[^"]*"' | head -1 | tr -d '"')"; codesign --force --sign "${identity:--}" "{{app}}"
 
 # Build, replace the copy in /Applications and restart it
 install: app stop

@@ -26,7 +26,8 @@ This builds `build/RadialRingMenu.app`, replaces `/Applications/RadialRingMenu.a
 with it and restarts the app. The app lives in the menu bar. To start it at
 login, add it under System Settings → General → Login Items.
 
-The app doesn't need Accessibility or Input Monitoring permission.
+The app doesn't need Accessibility or Input Monitoring permission, except to
+stop stray scrolling after a trackpad pick (see Configuration).
 
 Other recipes:
 
@@ -79,6 +80,23 @@ menu, and typing a key or adding a modifier while holding it (like ⌥E) closes
 the menu without switching. A good pick is a side you rarely use for shortcuts,
 like `"right-cmd"` or `"left-option"`. Left/right only works for modifiers on
 their own, not in combos like `option+space`.
+
+**Trackpad**: `trackpad_fingers = 3` (or 4 or 5) also opens the menu when that
+many fingers rest on the trackpad. Slide them toward an app and lift to switch;
+lifting without moving cancels, and adding a finger cancels too. The fingers
+have to settle for a moment first, so gestures with more fingers don't flash the
+menu. macOS's own gestures with the same number of fingers still fire, so move
+those to another count in System Settings → Trackpad → More Gestures if they get
+in the way. This reads the trackpad through Apple's private MultitouchSupport
+framework, like BetterTouchTool does, since apps in the background don't get
+touch events otherwise.
+
+Unless a system gesture uses the same fingers, macOS also turns their movement
+into a scroll, which would coast on into the app you just switched to. Give the
+app the Accessibility permission (it asks on launch) and it drops that scroll.
+Builds are signed with your Apple Development certificate when you have one, so
+the permission survives rebuilds; with ad-hoc signing you'd have to grant it
+again after every `just install`.
 
 **Apps**: each entry needs a `name`, `bundle_id`, `path` or `process`.
 
