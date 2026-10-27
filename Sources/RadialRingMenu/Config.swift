@@ -13,6 +13,7 @@ struct Config: Equatable {
     var moveCursorToWindow: Bool
     /// An extra mouse button that opens the menu while held, counting from 1.
     var mouseButton: Int?
+    var showMenuBarIcon: Bool
     var apps: [AppSpec]
 
     static let defaultHotkey = "option+space"
@@ -97,6 +98,7 @@ extension Config {
             trackpadFingers: raw.trackpadFingers,
             moveCursorToWindow: raw.moveCursorToWindow ?? true,
             mouseButton: raw.mouseButton,
+            showMenuBarIcon: raw.showMenuBarIcon ?? true,
             apps: apps
         )
     }
@@ -165,6 +167,10 @@ extension Config {
         # stops doing anything else. Needs the Accessibility permission.
         # mouse_button = 5
 
+        # Hide the icon in the menu bar. Open the app again while it's running to
+        # bring the icon back until the config is next reloaded.
+        # show_menu_bar_icon = false
+
         # Apps are laid out clockwise starting at the top.
         # Each entry needs a `name`, `bundle_id` or `path`. A `name` alone is looked
         # up in /Applications and the system app folders. For a running executable
@@ -209,6 +215,7 @@ private struct RawConfig: Decodable {
     var trackpadFingers: Int?
     var moveCursorToWindow: Bool?
     var mouseButton: Int?
+    var showMenuBarIcon: Bool?
     var apps: [AppSpec]?
 
     enum CodingKeys: String, CodingKey, CaseIterable {
@@ -218,6 +225,7 @@ private struct RawConfig: Decodable {
         case trackpadFingers = "trackpad_fingers"
         case moveCursorToWindow = "move_cursor_to_window"
         case mouseButton = "mouse_button"
+        case showMenuBarIcon = "show_menu_bar_icon"
         case apps
     }
 
@@ -230,6 +238,7 @@ private struct RawConfig: Decodable {
         trackpadFingers = try container.decodeIfPresent(Int.self, forKey: .trackpadFingers)
         moveCursorToWindow = try container.decodeIfPresent(Bool.self, forKey: .moveCursorToWindow)
         mouseButton = try container.decodeIfPresent(Int.self, forKey: .mouseButton)
+        showMenuBarIcon = try container.decodeIfPresent(Bool.self, forKey: .showMenuBarIcon)
         apps = try container.decodeIfPresent([AppSpec].self, forKey: .apps)
     }
 }

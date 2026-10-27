@@ -112,6 +112,12 @@ window, once the app is in front. Set `move_cursor_to_window = false` to leave i
 where it is. It also stays put if you move the mouse before the window shows
 up, or if no window does within a couple of seconds.
 
+**Menu bar icon**: `show_menu_bar_icon = false` hides the icon. Everything else
+keeps working, and the config is still reloaded when you save it. To reach the
+menu, open the app again while it's running (from Finder, Spotlight or
+`open -a RadialRingMenu`): the icon comes back until the config is next
+reloaded.
+
 **Apps**: each entry needs a `name`, `bundle_id`, `path` or `process`.
 
 `process` is for apps that aren't `.app` bundles, like a GUI app started with

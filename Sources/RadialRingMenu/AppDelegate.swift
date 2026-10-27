@@ -39,6 +39,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
+    /// Opening the app again while it's running brings back a hidden menu bar
+    /// icon, since that's the only way to reach its menu.
+    func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
+        statusItem?.isVisible = true
+        return false
+    }
+
     // MARK: - Config
 
     private func reloadConfig(force: Bool) {
@@ -105,6 +112,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         controller.configure(items: items, config: config)
+        statusItem?.isVisible = config.showMenuBarIcon
         hotkeyMenuItem.title = registeredHotkey.map { "Hold \($0) to open" } ?? "No hotkey registered"
 
         if !problems.isEmpty {

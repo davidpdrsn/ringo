@@ -431,3 +431,10 @@ import Testing
         #expect(throws: ConfigError.self) { try Config.parse("mouse_button = 2") }
     }
 }
+
+@Suite struct MenuBarIconConfigTests {
+    @Test func showsTheIconByDefault() throws {
+        #expect(try Config.parse("").showMenuBarIcon)
+        #expect(try Config.parse("show_menu_bar_icon = false").showMenuBarIcon == false)
+    }
+}
