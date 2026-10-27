@@ -14,7 +14,7 @@
     in
     {
       devShells = nixpkgs.lib.genAttrs systems (system: {
-        default = nixpkgs.legacyPackages.${system}.mkShell { };
+        default = nixpkgs.legacyPackages.${system}.mkShellNoCC { };
       });
     };
 }
