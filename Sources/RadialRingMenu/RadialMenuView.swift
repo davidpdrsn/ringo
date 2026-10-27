@@ -18,6 +18,7 @@ final class RadialMenuView: NSView {
     private var itemLayers: [ItemLayers] = []
     private var layout = RadialLayout(count: 0, radius: 0, iconSize: 0)
     private var iconSize: CGFloat = 64
+    private var openDuration: CFTimeInterval = 0.18
     private var rasterScale: CGFloat = 0
 
     private var center: CGPoint = .zero
@@ -34,8 +35,8 @@ final class RadialMenuView: NSView {
     private let labelBackground = CALayer()
     private let label = CATextLayer()
 
-    private static let openDuration: CFTimeInterval = 0.18
-    private static let stagger: CFTimeInterval = 0.012
+    /// Each icon starts this fraction of `openDuration` after the one before it.
+    private static let staggerRatio = 1.0 / 15
     private static let centerRingRadius: CGFloat = 13
     private static let labelFont = NSFont.systemFont(ofSize: 13, weight: .semibold)
 
@@ -109,12 +110,13 @@ final class RadialMenuView: NSView {
 
     // MARK: - Setup
 
-    func configure(items: [MenuItem], layout: RadialLayout, iconSize: CGFloat) {
+    func configure(items: [MenuItem], layout: RadialLayout, iconSize: CGFloat, openDuration: CFTimeInterval) {
         for item in itemLayers {
             item.container.removeFromSuperlayer()
         }
         self.layout = layout
         self.iconSize = iconSize
+        self.openDuration = openDuration
         rasterScale = 0
 
         itemLayers = items.map { ItemLayers(item: $0, iconSize: iconSize) }
@@ -169,7 +171,7 @@ final class RadialMenuView: NSView {
         let dt = lastFrameTime.map { min(time - $0, 0.1) } ?? 0
         lastFrameTime = time
         let elapsed = time - openedAt
-        let appear = easeOutCubic(progress(elapsed, duration: Self.openDuration))
+        let appear = easeOutCubic(progress(elapsed, duration: openDuration))
 
         CATransaction.begin()
         CATransaction.setDisableActions(true)
@@ -188,7 +190,7 @@ final class RadialMenuView: NSView {
         centerRing.transform = CATransform3DMakeScale(appear, appear, 1)
 
         for (index, item) in itemLayers.enumerated() {
-            let t = progress(elapsed - Double(index) * Self.stagger, duration: Self.openDuration)
+            let t = progress(elapsed - Double(index) * openDuration * Self.staggerRatio, duration: openDuration)
             let travel = easeOutBack(t)
             let offset = layout.offset(of: index)
             item.container.position = CGPoint(x: center.x + offset.x * travel, y: center.y + offset.y * travel)
@@ -357,7 +359,8 @@ private final class ItemLayers {
 }
 
 private func progress(_ elapsed: CFTimeInterval, duration: CFTimeInterval) -> CGFloat {
-    CGFloat(min(max(elapsed / duration, 0), 1))
+    guard duration > 0 else { return elapsed >= 0 ? 1 : 0 }
+    return CGFloat(min(max(elapsed / duration, 0), 1))
 }
 
 private func easeOutCubic(_ t: CGFloat) -> CGFloat {

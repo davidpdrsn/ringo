@@ -7,6 +7,8 @@ struct Config: Equatable {
     /// Distance from the center of the menu to the center of each icon, in points.
     var radius: Double
     var iconSize: Double
+    /// How long icons take to fan out when the menu opens, in seconds.
+    var openAnimationDuration: Double
     /// Opens the menu when this many fingers rest on the trackpad. `nil` is off.
     var trackpadFingers: Int?
     /// Moves the cursor to the middle of the app's window after switching.
@@ -19,6 +21,7 @@ struct Config: Equatable {
     static let defaultHotkey = "option+space"
     static let defaultRadius = 110.0
     static let defaultIconSize = 64.0
+    static let defaultOpenAnimationMs = 180.0
 }
 
 /// One entry in the `[[apps]]` array. At least one field must be set.
@@ -78,6 +81,11 @@ extension Config {
             throw .invalid("icon_size must be between 16 and 512")
         }
 
+        let openAnimationMs = raw.openAnimationMs ?? defaultOpenAnimationMs
+        guard (0...1000).contains(openAnimationMs) else {
+            throw .invalid("open_animation_ms must be between 0 and 1000")
+        }
+
         let apps = raw.apps ?? []
         if let index = apps.firstIndex(where: { $0.name == nil && $0.bundleID == nil && $0.path == nil && $0.process == nil }) {
             throw .invalid("apps[\(index)] needs a `name`, `bundle_id`, `path` or `process`")
@@ -97,6 +105,7 @@ extension Config {
             hotkey: hotkey,
             radius: radius,
             iconSize: iconSize,
+            openAnimationDuration: openAnimationMs / 1000,
             trackpadFingers: raw.trackpadFingers,
             moveCursorToWindow: raw.moveCursorToWindow ?? true,
             mouseButton: raw.mouseButton,
@@ -151,6 +160,10 @@ extension Config {
         # Distance from the cursor to the icons, and the icon size, in points.
         radius = 110
         icon_size = 64
+
+        # How long the icons take to fan out when the menu opens, in milliseconds.
+        # 0 shows them right away.
+        open_animation_ms = 180
 
         # Also open the menu by resting this many fingers (3-5) on the trackpad.
         # Slide them toward an app and lift to switch; adding a finger cancels.
@@ -215,6 +228,7 @@ private struct RawConfig: Decodable {
     var hotkey: String?
     var radius: Double?
     var iconSize: Double?
+    var openAnimationMs: Double?
     var trackpadFingers: Int?
     var moveCursorToWindow: Bool?
     var mouseButton: Int?
@@ -225,6 +239,7 @@ private struct RawConfig: Decodable {
         case hotkey
         case radius
         case iconSize = "icon_size"
+        case openAnimationMs = "open_animation_ms"
         case trackpadFingers = "trackpad_fingers"
         case moveCursorToWindow = "move_cursor_to_window"
         case mouseButton = "mouse_button"
@@ -238,6 +253,7 @@ private struct RawConfig: Decodable {
         hotkey = try container.decodeIfPresent(String.self, forKey: .hotkey)
         radius = try container.decodeNumberIfPresent(forKey: .radius)
         iconSize = try container.decodeNumberIfPresent(forKey: .iconSize)
+        openAnimationMs = try container.decodeNumberIfPresent(forKey: .openAnimationMs)
         trackpadFingers = try container.decodeIfPresent(Int.self, forKey: .trackpadFingers)
         moveCursorToWindow = try container.decodeIfPresent(Bool.self, forKey: .moveCursorToWindow)
         mouseButton = try container.decodeIfPresent(Int.self, forKey: .mouseButton)

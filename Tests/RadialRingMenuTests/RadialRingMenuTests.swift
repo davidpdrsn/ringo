@@ -150,7 +150,15 @@ import Testing
         #expect(config.hotkey == (try Hotkey(parsing: Config.defaultHotkey)))
         #expect(config.radius == Config.defaultRadius)
         #expect(config.iconSize == Config.defaultIconSize)
+        #expect(config.openAnimationDuration == Config.defaultOpenAnimationMs / 1000)
         #expect(config.apps.isEmpty)
+    }
+
+    @Test func parsesOpenAnimation() throws {
+        #expect(try Config.parse("open_animation_ms = 300").openAnimationDuration == 0.3)
+        #expect(try Config.parse("open_animation_ms = 0").openAnimationDuration == 0)
+        #expect(throws: ConfigError.self) { try Config.parse("open_animation_ms = -1") }
+        #expect(throws: ConfigError.self) { try Config.parse("open_animation_ms = 5000") }
     }
 
     @Test func templateIsValid() throws {

@@ -51,6 +51,9 @@ hotkey = "option+space"
 radius = 110
 icon_size = 64
 
+# How long the icons take to fan out when the menu opens, in milliseconds.
+open_animation_ms = 180
+
 # Apps go clockwise, starting at 12 o'clock.
 [[apps]]
 name = "Safari"                  # looked up in /Applications and the system app folders
