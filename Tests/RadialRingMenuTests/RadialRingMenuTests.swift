@@ -363,3 +363,46 @@ import Testing
         #expect(lifting.shouldDrop(scrollAt: ScrollSuppression.maximumDuration + 0.01) == false)
     }
 }
+
+@Suite struct CursorMoverTests {
+    /// Shaped like `CGWindowListCopyWindowInfo`'s entries, numbers as `NSNumber`.
+    func window(pid: pid_t, layer: Int = 0, frame: CGRect, alpha: Double = 1) -> [String: Any] {
+        [
+            kCGWindowOwnerPID as String: NSNumber(value: pid),
+            kCGWindowLayer as String: NSNumber(value: layer),
+            kCGWindowBounds as String: frame.dictionaryRepresentation,
+            kCGWindowAlpha as String: NSNumber(value: alpha),
+        ]
+    }
+
+    @Test func centersOnTheFrontWindow() {
+        let windows = [
+            window(pid: 1, layer: 101, frame: CGRect(x: 0, y: 0, width: 1512, height: 982)),
+            window(pid: 2, frame: CGRect(x: 100, y: 50, width: 800, height: 600)),
+            window(pid: 3, frame: CGRect(x: 0, y: 0, width: 400, height: 400)),
+        ]
+        #expect(CursorMover.center(ofFrontWindowOf: 2, in: windows) == CGPoint(x: 500, y: 350))
+    }
+
+    @Test func waitsUntilTheAppIsInFront() {
+        let windows = [
+            window(pid: 3, frame: CGRect(x: 0, y: 0, width: 400, height: 400)),
+            window(pid: 2, frame: CGRect(x: 100, y: 50, width: 800, height: 600)),
+        ]
+        #expect(CursorMover.center(ofFrontWindowOf: 2, in: windows) == nil)
+    }
+
+    @Test func skipsTinyAndInvisibleWindows() {
+        let windows = [
+            window(pid: 3, frame: CGRect(x: 0, y: 0, width: 1, height: 1)),
+            window(pid: 3, frame: CGRect(x: 0, y: 0, width: 400, height: 400), alpha: 0),
+            window(pid: 2, frame: CGRect(x: 0, y: 0, width: 200, height: 100)),
+        ]
+        #expect(CursorMover.center(ofFrontWindowOf: 2, in: windows) == CGPoint(x: 100, y: 50))
+    }
+
+    @Test func parsesTheOption() throws {
+        #expect(try Config.parse("").moveCursorToWindow)
+        #expect(try Config.parse("move_cursor_to_window = false").moveCursorToWindow == false)
+    }
+}

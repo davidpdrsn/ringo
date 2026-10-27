@@ -98,6 +98,11 @@ Builds are signed with your Apple Development certificate when you have one, so
 the permission survives rebuilds; with ad-hoc signing you'd have to grant it
 again after every `just install`.
 
+**Cursor**: after switching, the cursor moves to the middle of the app's front
+window, once the app is in front. Set `move_cursor_to_window = false` to leave it
+where it is. It also stays put if you move the mouse before the window shows
+up, or if no window does within a couple of seconds.
+
 **Apps**: each entry needs a `name`, `bundle_id`, `path` or `process`.
 
 `process` is for apps that aren't `.app` bundles, like a GUI app started with

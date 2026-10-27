@@ -32,6 +32,8 @@ final class RadialMenuController: NSObject {
     private var layout = RadialLayout(count: 0, radius: 0, iconSize: 0)
     private var hotkey: Hotkey?
     private var iconSize: CGFloat = 0
+    private var moveCursorToWindow = true
+    private let cursorMover = CursorMover()
 
     private let panel = RadialMenuPanel()
     private let menuView = RadialMenuView()
@@ -61,6 +63,7 @@ final class RadialMenuController: NSObject {
         self.items = items
         hotkey = config.hotkey
         iconSize = config.iconSize
+        moveCursorToWindow = config.moveCursorToWindow
         layout = RadialLayout(count: items.count, radius: config.radius, iconSize: config.iconSize)
         menuView.configure(items: items, layout: layout, iconSize: config.iconSize)
     }
@@ -110,6 +113,9 @@ final class RadialMenuController: NSObject {
             NSSound.beep()
             return
         }
+
+        // Don't move the cursor from under the menu if the last switch is still waiting.
+        cursorMover.cancel()
 
         let mouse = NSEvent.mouseLocation
         let screen = NSScreen.screens.first { NSMouseInRect(mouse, $0.frame, false) } ?? NSScreen.main
@@ -182,9 +188,13 @@ final class RadialMenuController: NSObject {
         case .app(let url, _):
             let configuration = NSWorkspace.OpenConfiguration()
             configuration.activates = true
-            NSWorkspace.shared.openApplication(at: url, configuration: configuration) { _, error in
+            NSWorkspace.shared.openApplication(at: url, configuration: configuration) { [weak self] app, error in
                 if let error {
                     NSLog("Couldn't open %@: %@", url.path, error.localizedDescription)
+                }
+                guard let pid = app?.processIdentifier else { return }
+                DispatchQueue.main.async {
+                    MainActor.assumeIsolated { self?.moveCursor(toWindowOf: pid) }
                 }
             }
         case .process:
@@ -197,7 +207,14 @@ final class RadialMenuController: NSObject {
             NSApp.activate()
             NSApp.yieldActivation(to: app)
             app.activate(from: .current, options: [])
+            moveCursor(toWindowOf: app.processIdentifier)
         }
+    }
+
+    private func moveCursor(toWindowOf pid: pid_t) {
+        // The menu may have opened again while the app was launching.
+        guard moveCursorToWindow, !isOpen else { return }
+        cursorMover.moveCursor(toFrontWindowOf: pid)
     }
 
     // MARK: - Tracking

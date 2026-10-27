@@ -9,6 +9,8 @@ struct Config: Equatable {
     var iconSize: Double
     /// Opens the menu when this many fingers rest on the trackpad. `nil` is off.
     var trackpadFingers: Int?
+    /// Moves the cursor to the middle of the app's window after switching.
+    var moveCursorToWindow: Bool
     var apps: [AppSpec]
 
     static let defaultHotkey = "option+space"
@@ -86,6 +88,7 @@ extension Config {
             radius: radius,
             iconSize: iconSize,
             trackpadFingers: raw.trackpadFingers,
+            moveCursorToWindow: raw.moveCursorToWindow ?? true,
             apps: apps
         )
     }
@@ -145,6 +148,9 @@ extension Config {
         # scroll the app you switch to.
         # trackpad_fingers = 3
 
+        # Move the cursor to the middle of the app's window after switching to it.
+        move_cursor_to_window = true
+
         # Apps are laid out clockwise starting at the top.
         # Each entry needs a `name`, `bundle_id` or `path`. A `name` alone is looked
         # up in /Applications and the system app folders. For a running executable
@@ -187,6 +193,7 @@ private struct RawConfig: Decodable {
     var radius: Double?
     var iconSize: Double?
     var trackpadFingers: Int?
+    var moveCursorToWindow: Bool?
     var apps: [AppSpec]?
 
     enum CodingKeys: String, CodingKey, CaseIterable {
@@ -194,6 +201,7 @@ private struct RawConfig: Decodable {
         case radius
         case iconSize = "icon_size"
         case trackpadFingers = "trackpad_fingers"
+        case moveCursorToWindow = "move_cursor_to_window"
         case apps
     }
 
@@ -204,6 +212,7 @@ private struct RawConfig: Decodable {
         radius = try container.decodeNumberIfPresent(forKey: .radius)
         iconSize = try container.decodeNumberIfPresent(forKey: .iconSize)
         trackpadFingers = try container.decodeIfPresent(Int.self, forKey: .trackpadFingers)
+        moveCursorToWindow = try container.decodeIfPresent(Bool.self, forKey: .moveCursorToWindow)
         apps = try container.decodeIfPresent([AppSpec].self, forKey: .apps)
     }
 }
