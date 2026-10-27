@@ -11,6 +11,8 @@ struct Config: Equatable {
     var trackpadFingers: Int?
     /// Moves the cursor to the middle of the app's window after switching.
     var moveCursorToWindow: Bool
+    /// An extra mouse button that opens the menu while held, counting from 1.
+    var mouseButton: Int?
     var apps: [AppSpec]
 
     static let defaultHotkey = "option+space"
@@ -78,6 +80,11 @@ extension Config {
             throw .invalid("apps[\(index)] needs a `name`, `bundle_id`, `path` or `process`")
         }
 
+        if let button = raw.mouseButton, !(3...32).contains(button) {
+            // 1 and 2 are the left and right buttons.
+            throw .invalid("mouse_button must be between 3 and 32")
+        }
+
         if let fingers = raw.trackpadFingers, !(3...5).contains(fingers) {
             // Fewer would fire on every scroll.
             throw .invalid("trackpad_fingers must be 3, 4 or 5")
@@ -89,6 +96,7 @@ extension Config {
             iconSize: iconSize,
             trackpadFingers: raw.trackpadFingers,
             moveCursorToWindow: raw.moveCursorToWindow ?? true,
+            mouseButton: raw.mouseButton,
             apps: apps
         )
     }
@@ -151,6 +159,12 @@ extension Config {
         # Move the cursor to the middle of the app's window after switching to it.
         move_cursor_to_window = true
 
+        # Also open the menu while holding this mouse button. Buttons count from 1
+        # (1 is left, 2 right, 3 middle, 4 and 5 usually the side buttons); use
+        # "Identify Mouse Button…" in the menu bar menu to find yours. The button
+        # stops doing anything else. Needs the Accessibility permission.
+        # mouse_button = 5
+
         # Apps are laid out clockwise starting at the top.
         # Each entry needs a `name`, `bundle_id` or `path`. A `name` alone is looked
         # up in /Applications and the system app folders. For a running executable
@@ -194,6 +208,7 @@ private struct RawConfig: Decodable {
     var iconSize: Double?
     var trackpadFingers: Int?
     var moveCursorToWindow: Bool?
+    var mouseButton: Int?
     var apps: [AppSpec]?
 
     enum CodingKeys: String, CodingKey, CaseIterable {
@@ -202,6 +217,7 @@ private struct RawConfig: Decodable {
         case iconSize = "icon_size"
         case trackpadFingers = "trackpad_fingers"
         case moveCursorToWindow = "move_cursor_to_window"
+        case mouseButton = "mouse_button"
         case apps
     }
 
@@ -213,6 +229,7 @@ private struct RawConfig: Decodable {
         iconSize = try container.decodeNumberIfPresent(forKey: .iconSize)
         trackpadFingers = try container.decodeIfPresent(Int.self, forKey: .trackpadFingers)
         moveCursorToWindow = try container.decodeIfPresent(Bool.self, forKey: .moveCursorToWindow)
+        mouseButton = try container.decodeIfPresent(Int.self, forKey: .mouseButton)
         apps = try container.decodeIfPresent([AppSpec].self, forKey: .apps)
     }
 }

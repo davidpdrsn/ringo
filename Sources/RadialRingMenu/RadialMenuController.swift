@@ -12,6 +12,7 @@ import QuartzCore
 /// - With a modifier-only hotkey, typing a key or pressing another modifier
 ///   while holding it cancels, since that's someone typing ⌥E or using a
 ///   shortcut rather than reaching for the menu.
+/// - Holding an extra mouse button (`mouse_button`) works like the hotkey.
 /// - Resting fingers on the trackpad (`trackpad_fingers`) works the same way:
 ///   moving them picks a direction, lifting them switches, and adding a finger
 ///   cancels.
@@ -25,6 +26,8 @@ final class RadialMenuController: NSObject {
         case sticky
         /// Opened by fingers on the trackpad; lifting them decides.
         case trackpad
+        /// Opened by holding an extra mouse button; releasing it decides.
+        case mouseButton
     }
 
     private var phase = Phase.closed
@@ -76,9 +79,21 @@ final class RadialMenuController: NSObject {
             close()
         case (.released, .holding):
             triggerReleased()
-        case (.pressed, .holding), (.pressed, .trackpad), (.released, _):
+        case (.pressed, .holding), (.pressed, .trackpad), (.pressed, .mouseButton), (.released, _):
             // Key repeat, the trackpad already has the menu open, or a release
             // with nothing held open.
+            break
+        }
+    }
+
+    func handleMouseButton(_ event: HotKeyCenter.Event) {
+        switch (event, phase) {
+        case (.pressed, .closed):
+            open(.mouseButton)
+        case (.released, .mouseButton):
+            close(activating: layout.selection(for: pointerOffset()).map { items[$0] })
+        default:
+            // Something else has the menu open.
             break
         }
     }

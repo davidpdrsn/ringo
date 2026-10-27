@@ -419,3 +419,15 @@ import Testing
         #expect(DockBadge.label(from: ["other": 1] as NSDictionary) == nil)
     }
 }
+
+@Suite struct MouseButtonConfigTests {
+    @Test func parsesMouseButton() throws {
+        #expect(try Config.parse("mouse_button = 5").mouseButton == 5)
+        #expect(try Config.parse("").mouseButton == nil)
+    }
+
+    @Test func rejectsLeftAndRightClick() {
+        #expect(throws: ConfigError.self) { try Config.parse("mouse_button = 1") }
+        #expect(throws: ConfigError.self) { try Config.parse("mouse_button = 2") }
+    }
+}

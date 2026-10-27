@@ -82,6 +82,14 @@ the menu without switching. A good pick is a side you rarely use for shortcuts,
 like `"right-cmd"` or `"left-option"`. Left/right only works for modifiers on
 their own, not in combos like `option+space`.
 
+**Mouse button**: `mouse_button = 5` also opens the menu while that mouse button
+is held, like the hotkey. Buttons count from 1: 1 is left, 2 right, 3 middle,
+and 4 and 5 are usually the side buttons, but mice differ, so use *Identify
+Mouse Button…* in the menu bar menu and press the button to find its number.
+The button stops doing anything else, like going forward in a browser. This
+needs the Accessibility permission, and catches the button at the lowest level
+macOS allows, so remappers like LinearMouse don't get to change it first.
+
 **Trackpad**: `trackpad_fingers = 3` (or 4 or 5) also opens the menu when that
 many fingers rest on the trackpad. Slide them toward an app and lift to switch;
 lifting without moving cancels, and adding a finger cancels too. The fingers
