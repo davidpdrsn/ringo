@@ -54,6 +54,11 @@ icon_size = 64
 # How long the icons take to fan out when the menu opens, in milliseconds.
 open_animation_ms = 180
 
+# The grey ring behind the icons, as distances from the cursor in points.
+# Defaults to a bit narrower than the icons, so they stick out of it.
+backdrop_inner_radius = 90
+backdrop_outer_radius = 130
+
 # Apps go clockwise, starting at 12 o'clock.
 [[apps]]
 name = "Safari"                  # looked up in /Applications and the system app folders
@@ -149,7 +154,8 @@ To find an app's bundle ID:
 osascript -e 'id of app "Safari"'
 ```
 
-If there are more apps than fit around the ring, the radius grows to make room.
+If there are more apps than fit around the ring, the radius grows to make room,
+and the grey ring behind the icons grows by the same amount.
 
 ## Command line
 

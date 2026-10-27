@@ -69,7 +69,7 @@ final class RadialMenuController: NSObject {
         iconSize = config.iconSize
         moveCursorToWindow = config.moveCursorToWindow
         layout = RadialLayout(count: items.count, radius: config.radius, iconSize: config.iconSize)
-        menuView.configure(items: items, layout: layout, iconSize: config.iconSize, openDuration: config.openAnimationDuration)
+        menuView.configure(items: items, layout: layout, config: config)
     }
 
     func handle(_ event: HotKeyCenter.Event) {

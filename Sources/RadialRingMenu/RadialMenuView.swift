@@ -19,6 +19,7 @@ final class RadialMenuView: NSView {
     private var layout = RadialLayout(count: 0, radius: 0, iconSize: 0)
     private var iconSize: CGFloat = 64
     private var openDuration: CFTimeInterval = 0.18
+    private var backdropOuterRadius: CGFloat = 0
     private var rasterScale: CGFloat = 0
 
     private var center: CGPoint = .zero
@@ -110,13 +111,13 @@ final class RadialMenuView: NSView {
 
     // MARK: - Setup
 
-    func configure(items: [MenuItem], layout: RadialLayout, iconSize: CGFloat, openDuration: CFTimeInterval) {
+    func configure(items: [MenuItem], layout: RadialLayout, config: Config) {
         for item in itemLayers {
             item.container.removeFromSuperlayer()
         }
         self.layout = layout
-        self.iconSize = iconSize
-        self.openDuration = openDuration
+        iconSize = config.iconSize
+        openDuration = config.openAnimationDuration
         rasterScale = 0
 
         itemLayers = items.map { ItemLayers(item: $0, iconSize: iconSize) }
@@ -125,9 +126,11 @@ final class RadialMenuView: NSView {
             overlay.layer?.insertSublayer(item.container, below: labelBackground)
         }
 
-        let outer = layout.radius + iconSize / 2 + 14
-        let inner = max(Self.centerRingRadius + 12, layout.radius - iconSize / 2 - 14)
-        backdrop.maskImage = Self.ringMask(outer: outer, inner: inner)
+        // Keep the backdrop around the icons when the layout grew the radius to
+        // fit them.
+        let growth = layout.radius - config.radius
+        backdropOuterRadius = config.backdropOuterRadius + growth
+        backdrop.maskImage = Self.ringMask(outer: backdropOuterRadius, inner: config.backdropInnerRadius + growth)
     }
 
     /// Resets the open animation, centered on `center` (in view coordinates).
@@ -177,7 +180,7 @@ final class RadialMenuView: NSView {
         CATransaction.setDisableActions(true)
 
         let backdropScale = 0.7 + 0.3 * appear
-        let backdropSize = (layout.radius + iconSize / 2 + 14) * 2 * backdropScale
+        let backdropSize = backdropOuterRadius * 2 * backdropScale
         backdrop.frame = CGRect(
             x: center.x - backdropSize / 2,
             y: center.y - backdropSize / 2,

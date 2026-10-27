@@ -9,6 +9,10 @@ struct Config: Equatable {
     var iconSize: Double
     /// How long icons take to fan out when the menu opens, in seconds.
     var openAnimationDuration: Double
+    /// The edges of the grey ring behind the icons, as distances from the center
+    /// in points.
+    var backdropInnerRadius: Double
+    var backdropOuterRadius: Double
     /// Opens the menu when this many fingers rest on the trackpad. `nil` is off.
     var trackpadFingers: Int?
     /// Moves the cursor to the middle of the app's window after switching.
@@ -22,6 +26,9 @@ struct Config: Equatable {
     static let defaultRadius = 110.0
     static let defaultIconSize = 64.0
     static let defaultOpenAnimationMs = 180.0
+    /// By default the backdrop reaches this fraction of the icon size to either
+    /// side of `radius`. Less than a half, so the icons stick out past its edges.
+    static let defaultBackdropHalfWidthRatio = 0.3
 }
 
 /// One entry in the `[[apps]]` array. At least one field must be set.
@@ -86,6 +93,13 @@ extension Config {
             throw .invalid("open_animation_ms must be between 0 and 1000")
         }
 
+        let backdropInnerRadius = raw.backdropInnerRadius ?? max(0, radius - iconSize * defaultBackdropHalfWidthRatio)
+        let backdropOuterRadius = raw.backdropOuterRadius ?? radius + iconSize * defaultBackdropHalfWidthRatio
+        guard backdropInnerRadius >= 0 else { throw .invalid("backdrop_inner_radius can't be negative") }
+        guard backdropOuterRadius > backdropInnerRadius else {
+            throw .invalid("backdrop_outer_radius (\(backdropOuterRadius)) must be larger than backdrop_inner_radius (\(backdropInnerRadius))")
+        }
+
         let apps = raw.apps ?? []
         if let index = apps.firstIndex(where: { $0.name == nil && $0.bundleID == nil && $0.path == nil && $0.process == nil }) {
             throw .invalid("apps[\(index)] needs a `name`, `bundle_id`, `path` or `process`")
@@ -106,6 +120,8 @@ extension Config {
             radius: radius,
             iconSize: iconSize,
             openAnimationDuration: openAnimationMs / 1000,
+            backdropInnerRadius: backdropInnerRadius,
+            backdropOuterRadius: backdropOuterRadius,
             trackpadFingers: raw.trackpadFingers,
             moveCursorToWindow: raw.moveCursorToWindow ?? true,
             mouseButton: raw.mouseButton,
@@ -164,6 +180,13 @@ extension Config {
         # How long the icons take to fan out when the menu opens, in milliseconds.
         # 0 shows them right away.
         open_animation_ms = 180
+
+        # The grey ring behind the icons: how far its inner and outer edges are from
+        # the cursor, in points. By default it's a bit narrower than the icons, so
+        # they stick out of it. If the apps don't fit at `radius` and the menu grows
+        # to make room, the ring grows with it.
+        # backdrop_inner_radius = 90
+        # backdrop_outer_radius = 130
 
         # Also open the menu by resting this many fingers (3-5) on the trackpad.
         # Slide them toward an app and lift to switch; adding a finger cancels.
@@ -229,6 +252,8 @@ private struct RawConfig: Decodable {
     var radius: Double?
     var iconSize: Double?
     var openAnimationMs: Double?
+    var backdropInnerRadius: Double?
+    var backdropOuterRadius: Double?
     var trackpadFingers: Int?
     var moveCursorToWindow: Bool?
     var mouseButton: Int?
@@ -240,6 +265,8 @@ private struct RawConfig: Decodable {
         case radius
         case iconSize = "icon_size"
         case openAnimationMs = "open_animation_ms"
+        case backdropInnerRadius = "backdrop_inner_radius"
+        case backdropOuterRadius = "backdrop_outer_radius"
         case trackpadFingers = "trackpad_fingers"
         case moveCursorToWindow = "move_cursor_to_window"
         case mouseButton = "mouse_button"
@@ -254,6 +281,8 @@ private struct RawConfig: Decodable {
         radius = try container.decodeNumberIfPresent(forKey: .radius)
         iconSize = try container.decodeNumberIfPresent(forKey: .iconSize)
         openAnimationMs = try container.decodeNumberIfPresent(forKey: .openAnimationMs)
+        backdropInnerRadius = try container.decodeNumberIfPresent(forKey: .backdropInnerRadius)
+        backdropOuterRadius = try container.decodeNumberIfPresent(forKey: .backdropOuterRadius)
         trackpadFingers = try container.decodeIfPresent(Int.self, forKey: .trackpadFingers)
         moveCursorToWindow = try container.decodeIfPresent(Bool.self, forKey: .moveCursorToWindow)
         mouseButton = try container.decodeIfPresent(Int.self, forKey: .mouseButton)

@@ -161,6 +161,28 @@ import Testing
         #expect(throws: ConfigError.self) { try Config.parse("open_animation_ms = 5000") }
     }
 
+    @Test func parsesBackdropRadii() throws {
+        let config = try Config.parse("backdrop_inner_radius = 70\nbackdrop_outer_radius = 130.5")
+        #expect(config.backdropInnerRadius == 70)
+        #expect(config.backdropOuterRadius == 130.5)
+    }
+
+    @Test func derivesBackdropRadiiFromRadiusAndIconSize() throws {
+        let config = try Config.parse("radius = 100\nicon_size = 50")
+        #expect(config.backdropInnerRadius == 100 - 50 * Config.defaultBackdropHalfWidthRatio)
+        #expect(config.backdropOuterRadius == 100 + 50 * Config.defaultBackdropHalfWidthRatio)
+        // Setting one edge leaves the other at its default.
+        let inner = try Config.parse("backdrop_inner_radius = 60")
+        #expect(inner.backdropOuterRadius == Config.defaultRadius + Config.defaultIconSize * Config.defaultBackdropHalfWidthRatio)
+    }
+
+    @Test func rejectsBadBackdropRadii() {
+        #expect(throws: ConfigError.self) { try Config.parse("backdrop_inner_radius = -1") }
+        #expect(throws: ConfigError.self) { try Config.parse("backdrop_inner_radius = 100\nbackdrop_outer_radius = 100") }
+        // Only an outer edge inside the default inner one.
+        #expect(throws: ConfigError.self) { try Config.parse("backdrop_outer_radius = 50") }
+    }
+
     @Test func templateIsValid() throws {
         let config = try Config.parse(Config.template)
         #expect(!config.apps.isEmpty)
