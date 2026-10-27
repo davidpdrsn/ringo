@@ -223,7 +223,7 @@ final class RadialMenuView: NSView {
     /// Skips straight to how the pointer, label and icons look with `selection`,
     /// for a preview that's restyled while it's open.
     func settle(selection: Int?) {
-        pointerOpacity = 1
+        pointerOpacity = selection == nil ? 0 : 1
         labelOpacity = selection == nil ? 0 : 1
         for (index, item) in itemLayers.enumerated() {
             item.highlight = index == selection ? 1 : 0
@@ -273,7 +273,9 @@ final class RadialMenuView: NSView {
             item.container.opacity = Float(min(1, t * 2.5) * (1 - (1 - unselectedIconOpacity) * item.recede))
         }
 
-        let pointerVisible = hypot(offset.x, offset.y) >= layout.deadZone * 0.5
+        // Only with an app selected, so they never promise a switch that letting
+        // go in the dead zone wouldn't make.
+        let pointerVisible = selection != nil
         approach(&pointerOpacity, pointerVisible ? 1 : 0, rate: 30, dt: dt)
         for highlight in [outerHighlight, innerHighlight] {
             highlight.layer.opacity = Float(pointerOpacity * appear)
