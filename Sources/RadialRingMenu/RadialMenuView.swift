@@ -129,7 +129,8 @@ final class RadialMenuView: NSView {
     }
 
     /// Resets the open animation, centered on `center` (in view coordinates).
-    func present(at center: CGPoint, time: CFTimeInterval) {
+    /// `badges` has each item's Dock badge, if it has one.
+    func present(at center: CGPoint, badges: [String?], time: CFTimeInterval) {
         self.center = center
         openedAt = time
         lastFrameTime = nil
@@ -150,9 +151,10 @@ final class RadialMenuView: NSView {
 
         CATransaction.begin()
         CATransaction.setDisableActions(true)
-        for item in itemLayers {
+        for (item, badge) in zip(itemLayers, badges) {
             item.highlight = 0
             item.emphasis = 1
+            item.setBadge(badge, iconSize: iconSize)
         }
         centerRing.position = center
         pointer.position = center
@@ -256,6 +258,8 @@ private final class ItemLayers {
     let container = CALayer()
     let halo = CALayer()
     let icon = CALayer()
+    private let badge = CALayer()
+    private let badgeText = CATextLayer()
 
     /// 0...1, how selected the item looks.
     var highlight: CGFloat = 0
@@ -285,8 +289,37 @@ private final class ItemLayers {
         icon.shadowRadius = 3
         icon.shadowOffset = CGSize(width: 0, height: -1.5)
 
+        badge.backgroundColor = NSColor.systemRed.cgColor
+        badge.shadowColor = NSColor.black.cgColor
+        badge.shadowOpacity = 0.3
+        badge.shadowRadius = 1.5
+        badge.shadowOffset = CGSize(width: 0, height: -0.5)
+        badge.isHidden = true
+        badgeText.foregroundColor = NSColor.white.cgColor
+        badgeText.alignmentMode = .center
+        badgeText.truncationMode = .end
+        badge.addSublayer(badgeText)
+
         container.addSublayer(halo)
         container.addSublayer(icon)
+        container.addSublayer(badge)
+    }
+
+    /// Shows `label` in a red badge over the top right corner, like the Dock.
+    func setBadge(_ label: String?, iconSize: CGFloat) {
+        badge.isHidden = label == nil
+        guard let label else { return }
+        let height = (iconSize * 0.34).rounded()
+        let font = NSFont.systemFont(ofSize: height * 0.62, weight: .semibold)
+        let textSize = (label as NSString).size(withAttributes: [.font: font])
+        let width = min(max(height, ceil(textSize.width) + height * 0.6), iconSize)
+        badge.bounds = CGRect(x: 0, y: 0, width: width, height: height)
+        badge.cornerRadius = height / 2
+        badge.position = CGPoint(x: iconSize - width / 2 + height * 0.15, y: iconSize - height / 2 + height * 0.15)
+        badgeText.font = font
+        badgeText.fontSize = font.pointSize
+        badgeText.string = label
+        badgeText.frame = CGRect(x: 0, y: (height - ceil(textSize.height)) / 2, width: width, height: ceil(textSize.height))
     }
 
     /// Renders the icon at the largest size it's shown at (when highlighted), so
@@ -318,6 +351,8 @@ private final class ItemLayers {
         icon.contents = context.makeImage()
         container.contentsScale = scale
         halo.contentsScale = scale
+        badge.contentsScale = scale
+        badgeText.contentsScale = scale
     }
 }
 

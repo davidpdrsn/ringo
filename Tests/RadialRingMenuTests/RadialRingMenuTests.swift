@@ -406,3 +406,16 @@ import Testing
         #expect(try Config.parse("move_cursor_to_window = false").moveCursorToWindow == false)
     }
 }
+
+@Suite struct DockBadgeTests {
+    @Test func readsTheLabel() {
+        #expect(DockBadge.label(from: ["label": "1"] as NSDictionary) == "1")
+        #expect(DockBadge.label(from: ["label": "\u{2022}"] as NSDictionary) == "\u{2022}")
+    }
+
+    @Test func treatsMissingOrEmptyAsNoBadge() {
+        #expect(DockBadge.label(from: nil) == nil)
+        #expect(DockBadge.label(from: ["label": ""] as NSDictionary) == nil)
+        #expect(DockBadge.label(from: ["other": 1] as NSDictionary) == nil)
+    }
+}

@@ -11,7 +11,8 @@ one and let go to switch to it.
   is held.
 - **Click** while holding also switches. Right click cancels.
 
-Picking an app that isn't running launches it.
+Picking an app that isn't running launches it. Apps show the same badge they
+have in the Dock, like an unread count.
 
 ## Building
 

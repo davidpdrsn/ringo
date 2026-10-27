@@ -138,7 +138,11 @@ final class RadialMenuController: NSObject {
         NSCursor.arrow.set()
 
         let now = CACurrentMediaTime()
-        menuView.present(at: toView(center), time: now)
+        let runningApps = NSWorkspace.shared.runningApplications
+        let badges = items.map { item in
+            item.runningApplication(in: runningApps).flatMap { DockBadge.label(for: $0.processIdentifier) }
+        }
+        menuView.present(at: toView(center), badges: badges, time: now)
 
         let link = menuView.displayLink(target: self, selector: #selector(tick(_:)))
         link.add(to: .main, forMode: .common)

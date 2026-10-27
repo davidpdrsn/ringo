@@ -63,12 +63,13 @@ func checkConfig(at url: URL) -> Int32 {
     for spec in config.apps {
         do {
             let item = try AppResolver.resolve(spec)
+            let app = item.runningApplication(in: NSWorkspace.shared.runningApplications)
+            let badge = app.flatMap { DockBadge.label(for: $0.processIdentifier) }.map { " [badge \($0)]" } ?? ""
             switch item.target {
             case .app(let url, _):
-                print("  ✓ \(item.title) — \(url.path)")
+                print("  ✓ \(item.title) — \(url.path)\(badge)")
             case .process(let name):
-                let running = item.runningApplication(in: NSWorkspace.shared.runningApplications) != nil
-                print("  ✓ \(item.title) — process \"\(name)\" (\(running ? "running" : "not running"))")
+                print("  ✓ \(item.title) — process \"\(name)\" (\(app != nil ? "running" : "not running"))\(badge)")
             }
         } catch {
             failed = true
