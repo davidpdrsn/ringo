@@ -2,6 +2,10 @@
 
 A pie-menu app switcher for macOS, in the spirit of Blender's pie menus.
 
+<p align="center">
+  <img src="docs/screenshot.png" width="490" alt="The menu open around the cursor, with Safari selected">
+</p>
+
 Hold the hotkey and your apps fan out in a ring around the cursor. Flick toward
 one and let go to switch to it.
 
