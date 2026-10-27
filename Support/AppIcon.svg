@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <!-- Halo: the app's ring with the picked direction lit. Drawn on the macOS
+       icon grid: 1024 pt canvas, 824 pt body, 185 pt corners. -->
+  <defs>
+    <linearGradient id="body" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#ffffff"/>
+      <stop offset="1" stop-color="#d6dbe4"/>
+    </linearGradient>
+    <linearGradient id="ring" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#dfe3ea"/>
+      <stop offset="1" stop-color="#8e97a8"/>
+    </linearGradient>
+  </defs>
+  <rect x="100" y="100" width="824" height="824" rx="185" fill="url(#body)"/>
+  <circle cx="512" cy="512" r="250" fill="none" stroke="url(#ring)" stroke-width="92"/>
+  <path d="M597.5 277.1 A250 250 0 0 1 746.9 426.5" fill="none" stroke="#2f7cff" stroke-width="92" stroke-linecap="round"/>
+</svg>

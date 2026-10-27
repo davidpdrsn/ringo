@@ -15,9 +15,10 @@ default:
 app:
     swift build -c release
     rm -rf "{{app}}"
-    mkdir -p "{{app}}/Contents/MacOS"
+    mkdir -p "{{app}}/Contents/MacOS" "{{app}}/Contents/Resources"
     cp "$(swift build -c release --show-bin-path)/RadialRingMenu" "{{app}}/Contents/MacOS/"
     cp Support/Info.plist "{{app}}/Contents/Info.plist"
+    cp Support/AppIcon.icns "{{app}}/Contents/Resources/AppIcon.icns"
     # A stable identity keeps permissions like Accessibility across rebuilds;
     # ad-hoc signing makes every build look like a new app to macOS.
     identity="$(security find-identity -v -p codesigning | grep -o '"Apple Development[^"]*"' | head -1 | tr -d '"')"; codesign --force --sign "${identity:--}" "{{app}}"
@@ -36,6 +37,10 @@ run: app stop
 stop:
     -pkill -x RadialRingMenu
     for _ in $(seq 50); do pgrep -x RadialRingMenu > /dev/null || exit 0; sleep 0.1; done; echo "RadialRingMenu didn't quit" >&2; exit 1
+
+# Re-render Support/AppIcon.icns after changing Support/AppIcon.svg
+icon:
+    swift Support/render-icns.swift Support/AppIcon.svg Support/AppIcon.icns
 
 test:
     swift test {{test_flags}}
