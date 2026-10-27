@@ -129,7 +129,7 @@ final class RadialMenuView: NSView {
     }
 
     /// Resets the open animation, centered on `center` (in view coordinates).
-    func present(at center: CGPoint, runningBundleIDs: Set<String>, time: CFTimeInterval) {
+    func present(at center: CGPoint, time: CFTimeInterval) {
         self.center = center
         openedAt = time
         lastFrameTime = nil
@@ -153,7 +153,6 @@ final class RadialMenuView: NSView {
         for item in itemLayers {
             item.highlight = 0
             item.emphasis = 1
-            item.dot.isHidden = !(item.bundleID.map(runningBundleIDs.contains) ?? false)
         }
         centerRing.position = center
         pointer.position = center
@@ -252,13 +251,11 @@ final class RadialMenuView: NSView {
 @MainActor
 private final class ItemLayers {
     let title: String
-    let bundleID: String?
     private let image: NSImage
 
     let container = CALayer()
     let halo = CALayer()
     let icon = CALayer()
-    let dot = CALayer()
 
     /// 0...1, how selected the item looks.
     var highlight: CGFloat = 0
@@ -267,7 +264,6 @@ private final class ItemLayers {
 
     init(item: MenuItem, iconSize: CGFloat) {
         title = item.title
-        bundleID = item.bundleID
         image = item.icon
 
         container.bounds = CGRect(x: 0, y: 0, width: iconSize, height: iconSize)
@@ -289,19 +285,8 @@ private final class ItemLayers {
         icon.shadowRadius = 3
         icon.shadowOffset = CGSize(width: 0, height: -1.5)
 
-        let dotSize: CGFloat = 5
-        dot.bounds = CGRect(x: 0, y: 0, width: dotSize, height: dotSize)
-        dot.position = CGPoint(x: iconSize / 2, y: -3)
-        dot.cornerRadius = dotSize / 2
-        dot.backgroundColor = NSColor.white.withAlphaComponent(0.9).cgColor
-        dot.shadowColor = NSColor.black.cgColor
-        dot.shadowOpacity = 0.5
-        dot.shadowRadius = 1.5
-        dot.shadowOffset = .zero
-
         container.addSublayer(halo)
         container.addSublayer(icon)
-        container.addSublayer(dot)
     }
 
     /// Renders the icon at the largest size it's shown at (when highlighted), so
@@ -323,12 +308,15 @@ private final class ItemLayers {
 
         NSGraphicsContext.saveGraphicsState()
         NSGraphicsContext.current = NSGraphicsContext(cgContext: context, flipped: false)
-        image.draw(in: NSRect(x: 0, y: 0, width: pixels, height: pixels))
+        // Fit custom icons that aren't square instead of stretching them.
+        let side = CGFloat(pixels)
+        let aspect = image.size.height > 0 ? image.size.width / image.size.height : 1
+        let size = aspect >= 1 ? CGSize(width: side, height: side / aspect) : CGSize(width: side * aspect, height: side)
+        image.draw(in: NSRect(x: (side - size.width) / 2, y: (side - size.height) / 2, width: size.width, height: size.height))
         NSGraphicsContext.restoreGraphicsState()
 
         icon.contents = context.makeImage()
         container.contentsScale = scale
-        dot.contentsScale = scale
         halo.contentsScale = scale
     }
 }

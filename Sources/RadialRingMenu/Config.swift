@@ -16,12 +16,17 @@ struct Config: Equatable {
 
 /// One entry in the `[[apps]]` array. At least one field must be set.
 ///
-/// The app is looked up by `path`, then `bundle_id`, then `name`. When `name`
-/// is set together with one of the others it's only used as the label.
+/// The app is looked up by `path`, then `bundle_id`, then `process`, then
+/// `name`. When `name` is set together with one of the others it's only used as
+/// the label.
 struct AppSpec: Equatable {
     var name: String?
     var bundleID: String?
     var path: String?
+    /// The name of a running process that isn't an app bundle.
+    var process: String?
+    /// An image file or app to take the icon from, instead of the app's own.
+    var icon: String?
 }
 
 enum ConfigError: Error, CustomStringConvertible {
@@ -65,8 +70,8 @@ extension Config {
         }
 
         let apps = raw.apps ?? []
-        if let index = apps.firstIndex(where: { $0.name == nil && $0.bundleID == nil && $0.path == nil }) {
-            throw .invalid("apps[\(index)] needs a `name`, `bundle_id` or `path`")
+        if let index = apps.firstIndex(where: { $0.name == nil && $0.bundleID == nil && $0.path == nil && $0.process == nil }) {
+            throw .invalid("apps[\(index)] needs a `name`, `bundle_id`, `path` or `process`")
         }
 
         return Config(hotkey: hotkey, radius: radius, iconSize: iconSize, apps: apps)
@@ -121,7 +126,11 @@ extension Config {
 
         # Apps are laid out clockwise starting at the top.
         # Each entry needs a `name`, `bundle_id` or `path`. A `name` alone is looked
-        # up in /Applications and the system app folders.
+        # up in /Applications and the system app folders. For a running executable
+        # that isn't an app bundle (e.g. started with `cargo run`), use
+        # `process = "<process name>"`; it can be switched to but not launched.
+        # Any entry can set `icon` to an image file (PNG, ICNS, ...) or an app to
+        # use instead of its own icon.
 
         [[apps]]
         name = "Finder"
@@ -180,6 +189,8 @@ extension AppSpec: Decodable {
         case name
         case bundleID = "bundle_id"
         case path
+        case process
+        case icon
     }
 
     init(from decoder: any Decoder) throws {
@@ -188,6 +199,8 @@ extension AppSpec: Decodable {
         name = try container.decodeIfPresent(String.self, forKey: .name)
         bundleID = try container.decodeIfPresent(String.self, forKey: .bundleID)
         path = try container.decodeIfPresent(String.self, forKey: .path)
+        process = try container.decodeIfPresent(String.self, forKey: .process)
+        icon = try container.decodeIfPresent(String.self, forKey: .icon)
     }
 }
 

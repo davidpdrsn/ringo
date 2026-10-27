@@ -63,7 +63,13 @@ func checkConfig(at url: URL) -> Int32 {
     for spec in config.apps {
         do {
             let item = try AppResolver.resolve(spec)
-            print("  ✓ \(item.title) — \(item.url.path)")
+            switch item.target {
+            case .app(let url, _):
+                print("  ✓ \(item.title) — \(url.path)")
+            case .process(let name):
+                let running = item.runningApplication(in: NSWorkspace.shared.runningApplications) != nil
+                print("  ✓ \(item.title) — process \"\(name)\" (\(running ? "running" : "not running"))")
+            }
         } catch {
             failed = true
             print("  ✗ \(error)")

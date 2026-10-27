@@ -1,3 +1,4 @@
+import AppKit
 import Carbon.HIToolbox
 import CoreGraphics
 import Testing
@@ -162,6 +163,16 @@ import Testing
         #expect(throws: ConfigError.self) { try Config.parse("[[apps]]\nnmae = \"Safari\"") }
     }
 
+    @Test func parsesProcessEntries() throws {
+        let config = try Config.parse("""
+            [[apps]]
+            process = "gitbutler-gpui"
+            name = "GitButler"
+            icon = "~/icon.png"
+            """)
+        #expect(config.apps == [AppSpec(name: "GitButler", process: "gitbutler-gpui", icon: "~/icon.png")])
+    }
+
     @Test func rejectsEmptyAppEntries() {
         #expect(throws: ConfigError.self) { try Config.parse("[[apps]]\nname = \"Safari\"\n\n[[apps]]\n") }
     }
@@ -173,5 +184,53 @@ import Testing
 
     @Test func rejectsInvalidToml() {
         #expect(throws: ConfigError.self) { try Config.parse("hotkey = ") }
+    }
+}
+
+@Suite struct AppResolverTests {
+    @Test func resolvesProcessesWithoutLookingThemUp() throws {
+        let item = try AppResolver.resolve(AppSpec(process: "definitely-not-running"))
+        #expect(item.title == "definitely-not-running")
+        guard case .process(let name) = item.target else {
+            Issue.record("expected a process target, got \(item.target)")
+            return
+        }
+        #expect(name == "definitely-not-running")
+        #expect(item.runningApplication(in: NSWorkspace.shared.runningApplications) == nil)
+    }
+
+    @Test func usesNameAsProcessLabel() throws {
+        let item = try AppResolver.resolve(AppSpec(name: "GitButler", process: "gitbutler-gpui"))
+        #expect(item.title == "GitButler")
+    }
+
+    @Test func loadsCustomIcons() throws {
+        let png = FileManager.default.temporaryDirectory.appending(path: "radial-ring-menu-test-icon.png")
+        let rep = NSBitmapImageRep(
+            bitmapDataPlanes: nil, pixelsWide: 4, pixelsHigh: 2, bitsPerSample: 8, samplesPerPixel: 4,
+            hasAlpha: true, isPlanar: false, colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0
+        )!
+        try rep.representation(using: .png, properties: [:])!.write(to: png)
+        defer { try? FileManager.default.removeItem(at: png) }
+
+        let item = try AppResolver.resolve(AppSpec(process: "some-process", icon: png.path))
+        #expect(item.icon.size == CGSize(width: 4, height: 2))
+
+        // An app's icon can be borrowed too.
+        let borrowed = try AppResolver.resolve(AppSpec(process: "some-process", icon: "/System/Applications/Calculator.app"))
+        #expect(borrowed.icon.isValid)
+    }
+
+    @Test func rejectsBadIcons() {
+        #expect(throws: AppResolutionError.self) {
+            try AppResolver.resolve(AppSpec(process: "some-process", icon: "/no/such/icon.png"))
+        }
+        #expect(throws: AppResolutionError.self) {
+            try AppResolver.resolve(AppSpec(process: "some-process", icon: "/bin/ls"))
+        }
+    }
+
+    @Test func rejectsExecutablesThatArentApps() {
+        #expect(throws: AppResolutionError.self) { try AppResolver.resolve(AppSpec(path: "/bin/ls")) }
     }
 }

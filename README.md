@@ -11,8 +11,7 @@ one and let go to switch to it.
   is held.
 - **Click** while holding also switches. Right click cancels.
 
-Running apps have a dot under their icon. Picking an app that isn't running
-launches it.
+Picking an app that isn't running launches it.
 
 ## Building
 
@@ -60,6 +59,10 @@ bundle_id = "com.apple.Terminal" # name is optional and overrides the label
 [[apps]]
 path = "~/Applications/Some App.app"
 name = "Some App"
+
+[[apps]]
+process = "my-app"               # a running executable that isn't an .app
+icon = "~/code/my-app/icon.icns" # any entry can override its icon
 ```
 
 **Hotkey**: modifiers `cmd`, `shift`, `option` (or `alt`) and `ctrl`, plus one
@@ -77,8 +80,19 @@ the menu without switching. A good pick is a side you rarely use for shortcuts,
 like `"right-cmd"` or `"left-option"`. Left/right only works for modifiers on
 their own, not in combos like `option+space`.
 
-**Apps**: each entry needs a `name`, `bundle_id` or `path`. To find an app's
-bundle ID:
+**Apps**: each entry needs a `name`, `bundle_id`, `path` or `process`.
+
+`process` is for apps that aren't `.app` bundles, like a GUI app started with
+`cargo run`. It matches a running process by name and switches to it, but can't
+launch it, so picking it when it isn't running just beeps. These show the
+generic executable icon unless you set `icon`: an app that sets its Dock icon
+at runtime hands the image straight to the Dock, and nothing can read it back.
+
+`icon` takes an image file (PNG, ICNS, PDF, ...) or an `.app` to borrow the
+icon from, and works on any entry. Changes to the image file itself are picked
+up the next time the config is reloaded.
+
+To find an app's bundle ID:
 
 ```bash
 osascript -e 'id of app "Safari"'

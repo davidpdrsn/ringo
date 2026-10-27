@@ -103,8 +103,7 @@ final class RadialMenuController: NSObject {
         NSCursor.arrow.set()
 
         let now = CACurrentMediaTime()
-        let running = Set(NSWorkspace.shared.runningApplications.compactMap(\.bundleIdentifier))
-        menuView.present(at: toView(center), runningBundleIDs: running, time: now)
+        menuView.present(at: toView(center), time: now)
 
         let link = menuView.displayLink(target: self, selector: #selector(tick(_:)))
         link.add(to: .main, forMode: .common)
@@ -144,12 +143,25 @@ final class RadialMenuController: NSObject {
     }
 
     private func activate(_ item: MenuItem) {
-        let configuration = NSWorkspace.OpenConfiguration()
-        configuration.activates = true
-        NSWorkspace.shared.openApplication(at: item.url, configuration: configuration) { _, error in
-            if let error {
-                NSLog("Couldn't open %@: %@", item.url.path, error.localizedDescription)
+        switch item.target {
+        case .app(let url, _):
+            let configuration = NSWorkspace.OpenConfiguration()
+            configuration.activates = true
+            NSWorkspace.shared.openApplication(at: url, configuration: configuration) { _, error in
+                if let error {
+                    NSLog("Couldn't open %@: %@", url.path, error.localizedDescription)
+                }
             }
+        case .process:
+            guard let app = item.runningApplication(in: NSWorkspace.shared.runningApplications) else {
+                NSSound.beep()
+                return
+            }
+            // Since macOS 14 a background app's request to activate another app is
+            // ignored, unless it asks to be active itself and hands activation over.
+            NSApp.activate()
+            NSApp.yieldActivation(to: app)
+            app.activate(from: .current, options: [])
         }
     }
 
