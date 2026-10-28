@@ -70,7 +70,7 @@ final class RadialMenuView: NSView {
             transform: nil
         )
         centerRing.path = ringPath
-        centerRing.fillColor = NSColor.black.withAlphaComponent(0.3).cgColor
+        centerRing.fillColor = nil
         centerRing.lineWidth = Self.centerRingLineWidth
 
         backdropTint.fillRule = .evenOdd
