@@ -131,6 +131,9 @@ private struct StyleEditorView: View {
                         NumberSlider("Inner radius", value: $model.edited.outerRing.innerRadius, in: 0...400, step: 1, unit: "pt")
                         NumberSlider("Outer radius", value: $model.edited.outerRing.outerRadius, in: 1...400, step: 1, unit: "pt")
                         ColorRow("Tint", color: $model.edited.outerRing.color, fallback: .clear)
+                        NumberSlider("Blur opacity", value: $model.edited.outerRing.blurOpacity, in: 0...1, step: 0.05, unit: "")
+                        // The material's own blur is 30 points.
+                        NumberSlider("Blur radius", value: $model.edited.outerRing.blurRadius.or(30), in: 0...60, step: 0.5, unit: "pt")
                     }
                     HighlightSection(
                         "Outer ring highlight",

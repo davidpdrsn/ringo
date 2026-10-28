@@ -23,6 +23,8 @@ final class RadialMenuView: NSView {
     private var unselectedIconScale: CGFloat = 1
     private var openDuration: CFTimeInterval = 0.18
     private var backdropOuterRadius: CGFloat = 0
+    /// How much of the blur shows when the menu is fully open.
+    private var blurOpacity: CGFloat = 1
     /// The edges the backdrop's mask was made for.
     private var backdropMaskRadii: (outer: CGFloat, inner: CGFloat)?
     private var rasterScale: CGFloat = 0
@@ -34,7 +36,7 @@ final class RadialMenuView: NSView {
     private var labelOpacity: CGFloat = 0
     private var labelIndex: Int?
 
-    private let backdrop = NSVisualEffectView()
+    private let backdrop = BlurView()
     private let overlay = NSView()
     /// The configured color over the blurred backdrop, scaled and faded with it.
     private let backdropTint = CAShapeLayer()
@@ -151,6 +153,9 @@ final class RadialMenuView: NSView {
             backdropMaskRadii = maskRadii
             backdrop.maskImage = Self.ringMask(outer: backdropOuterRadius, inner: backdropInnerRadius)
         }
+        blurOpacity = config.outerRing.blurOpacity
+        backdrop.isHidden = blurOpacity == 0
+        backdrop.radius = config.outerRing.blurRadius.map { CGFloat($0) }
 
         // For highlights without a width: one app's share of the ring, so on the
         // outer ring it fills the gaps either side of the icon being pointed at
@@ -250,7 +255,7 @@ final class RadialMenuView: NSView {
             width: backdropSize,
             height: backdropSize
         )
-        backdrop.alphaValue = appear
+        backdrop.alphaValue = appear * blurOpacity
         backdropTint.opacity = Float(appear)
         backdropTint.transform = CATransform3DMakeScale(backdropScale, backdropScale, 1)
 

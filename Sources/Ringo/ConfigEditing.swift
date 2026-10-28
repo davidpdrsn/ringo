@@ -145,6 +145,8 @@ extension Config {
             ConfigEdit(table: "outer_ring", key: "inner_radius", value: number(outerRing.innerRadius)),
             ConfigEdit(table: "outer_ring", key: "outer_radius", value: number(outerRing.outerRadius)),
             ConfigEdit(table: "outer_ring", key: "color", value: color(outerRing.color)),
+            ConfigEdit(table: "outer_ring", key: "blur_opacity", value: number(outerRing.blurOpacity)),
+            ConfigEdit(table: "outer_ring", key: "blur_radius", value: outerRing.blurRadius.map(number)),
         ]
             + highlight(outerRing.highlight, in: "outer_ring.highlight")
             + [ConfigEdit(table: "inner_ring", key: "color", value: color(innerRing.color))]

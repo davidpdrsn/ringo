@@ -164,6 +164,8 @@ import Testing
         #expect(config.iconSize == Config.defaultIconSize)
         #expect(config.openAnimationDuration == Config.defaultOpenAnimationMs / 1000)
         #expect(config.outerRing.color == nil)
+        #expect(config.outerRing.blurOpacity == 1)
+        #expect(config.outerRing.blurRadius == nil)
         #expect(config.outerRing.highlight == .outerDefault)
         #expect(config.innerRing.color == nil)
         #expect(config.innerRing.highlight == .innerDefault)
@@ -209,10 +211,14 @@ import Testing
             inner_radius = 70
             outer_radius = 130.5
             color = "#00000080"
+            blur_opacity = 0.4
+            blur_radius = 8
             """)
         #expect(config.outerRing.innerRadius == 70)
         #expect(config.outerRing.outerRadius == 130.5)
         #expect(config.outerRing.color == RGBAColor(red: 0, green: 0, blue: 0, alpha: 128.0 / 255))
+        #expect(config.outerRing.blurOpacity == 0.4)
+        #expect(config.outerRing.blurRadius == 8)
     }
 
     @Test func derivesOuterRingFromIcons() throws {
@@ -229,6 +235,8 @@ import Testing
         #expect(throws: ConfigError.self) { try Config.parse("[outer_ring]\ninner_radius = 100\nouter_radius = 100") }
         // Only an outer edge inside the default inner one.
         #expect(throws: ConfigError.self) { try Config.parse("[outer_ring]\nouter_radius = 50") }
+        #expect(throws: ConfigError.self) { try Config.parse("[outer_ring]\nblur_opacity = 1.5") }
+        #expect(throws: ConfigError.self) { try Config.parse("[outer_ring]\nblur_radius = -2") }
     }
 
     @Test func parsesBothHighlightsTheSameWay() throws {

@@ -47,6 +47,12 @@ struct OuterRing: Equatable {
     /// Laid over the blurred ring, which shows through it below full opacity.
     /// `nil` leaves just the blur.
     var color: RGBAColor?
+    /// How much of the blur under the color shows, from 0 to 1. In between, what's
+    /// behind the menu shows through it unblurred.
+    var blurOpacity: Double
+    /// Swaps the system's frosted material for a plain blur of this many points,
+    /// with only `color` over it. `nil` keeps the material.
+    var blurRadius: Double?
     var highlight: RingHighlight
 }
 
@@ -203,6 +209,8 @@ extension Config {
             innerRadius: outerInnerRadius,
             outerRadius: outerOuterRadius,
             color: try parseColor(raw.outerRing?.color, key: "outer_ring.color"),
+            blurOpacity: try checked(raw.outerRing?.blurOpacity, in: 0...1, key: "outer_ring.blur_opacity") ?? 1,
+            blurRadius: try checked(raw.outerRing?.blurRadius, in: 0...100, key: "outer_ring.blur_radius"),
             highlight: try RingHighlight(raw.outerRing?.highlight, defaults: .outerDefault, table: "outer_ring.highlight")
         )
         let innerRing = InnerRing(
@@ -360,10 +368,19 @@ extension Config {
         # opaque replaces it). By default it's a bit narrower than the icons, so
         # they stick out of it, and there's only the blur. If the apps don't fit at
         # the radius and the menu grows to make room, the ring grows with it.
+        #   blur_opacity: how much of the blur under the color shows, from 0 to 1.
+        #     In between, what's behind the menu shows through it unblurred; at 0
+        #     with a transparent color there's no ring at all.
+        #   blur_radius: swaps the system's frosted material, which blurs what's
+        #     behind into a flat grey, for a plain blur of this many points with
+        #     only the color over it. Around 6 to 12 with a partly transparent
+        #     white gives a frosted, matte look like a toolbar's.
         [outer_ring]
         # inner_radius = 90
         # outer_radius = 130
         # color = "#00000080"
+        # blur_opacity = 1
+        # blur_radius = 8
 
         # The part of the ring in the direction of the cursor.
         #   shape: "wedge" fills the ring's width and fades out at its ends.
@@ -515,12 +532,16 @@ private struct RawOuterRing: Decodable {
     var innerRadius: Double?
     var outerRadius: Double?
     var color: String?
+    var blurOpacity: Double?
+    var blurRadius: Double?
     var highlight: RawRingHighlight?
 
     enum CodingKeys: String, CodingKey, CaseIterable {
         case innerRadius = "inner_radius"
         case outerRadius = "outer_radius"
         case color
+        case blurOpacity = "blur_opacity"
+        case blurRadius = "blur_radius"
         case highlight
     }
 
@@ -530,6 +551,8 @@ private struct RawOuterRing: Decodable {
         innerRadius = try container.decodeNumberIfPresent(forKey: .innerRadius)
         outerRadius = try container.decodeNumberIfPresent(forKey: .outerRadius)
         color = try container.decodeIfPresent(String.self, forKey: .color)
+        blurOpacity = try container.decodeNumberIfPresent(forKey: .blurOpacity)
+        blurRadius = try container.decodeNumberIfPresent(forKey: .blurRadius)
         highlight = try container.decodeIfPresent(RawRingHighlight.self, forKey: .highlight)
     }
 }

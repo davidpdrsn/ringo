@@ -76,6 +76,11 @@ unselected_scale = 1      # and how big, as a fraction of their size (0.2 to 1)
 inner_radius = 90
 outer_radius = 130
 color = "#00000080"
+blur_opacity = 1      # how much of the blur under the color shows, from 0 to 1; in
+                      # between, what's behind shows through it unblurred
+blur_radius = 8       # points; swaps the system's frosted material, which blurs what's
+                      # behind into a flat grey, for a plain blur with only the color
+                      # over it. Around 6 to 12 with a translucent white looks matte
 
 # The part of the ring in the direction of the cursor.
 [outer_ring.highlight]
