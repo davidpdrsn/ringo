@@ -445,6 +445,31 @@ import Testing
         #expect(gesture.process(frame(3), surfaceSize: surface, at: 1.1).first == .began)
     }
 
+    @Test func fingersLandingOneByOneBegin() {
+        var gesture = TrackpadGesture(fingers: 3)
+        _ = gesture.process(frame(1), surfaceSize: surface, at: 0)
+        _ = gesture.process(frame(2), surfaceSize: surface, at: 0.05)
+        _ = gesture.process(frame(3), surfaceSize: surface, at: 0.1)
+        #expect(gesture.process(frame(3), surfaceSize: surface, at: 0.2).first == .began)
+    }
+
+    @Test func aFingerJoiningAScrollDoesNothing() {
+        var gesture = TrackpadGesture(fingers: 3)
+        _ = gesture.process(frame(2), surfaceSize: surface, at: 0)
+        _ = gesture.process(frame(2), surfaceSize: surface, at: 0.5)
+        // A palm touches down while the two fingers scroll.
+        #expect(gesture.process(frame(3), surfaceSize: surface, at: 1).isEmpty)
+        #expect(gesture.process(frame(3), surfaceSize: surface, at: 1.1).isEmpty)
+        // Still blocked once the palm lifts again.
+        _ = gesture.process(frame(2), surfaceSize: surface, at: 1.2)
+        #expect(gesture.process(frame(3), surfaceSize: surface, at: 1.25).isEmpty)
+        #expect(gesture.process(frame(3), surfaceSize: surface, at: 1.35).isEmpty)
+        // And works again once all fingers are up.
+        _ = gesture.process(frame(0), surfaceSize: surface, at: 1.5)
+        _ = gesture.process(frame(3), surfaceSize: surface, at: 2)
+        #expect(gesture.process(frame(3), surfaceSize: surface, at: 2.1).first == .began)
+    }
+
     @Test func addingAFingerCancels() {
         var gesture = TrackpadGesture(fingers: 3)
         _ = gesture.process(frame(3), surfaceSize: surface, at: 0)

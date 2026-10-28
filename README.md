@@ -153,11 +153,13 @@ macOS allows, so remappers like LinearMouse don't get to change it first.
 many fingers rest on the trackpad. Slide them toward an app and lift to switch;
 lifting without moving cancels, and adding a finger cancels too. The fingers
 have to settle for a moment first, so gestures with more fingers don't flash the
-menu. macOS's own gestures with the same number of fingers still fire, so move
-those to another count in System Settings → Trackpad → More Gestures if they get
-in the way. This reads the trackpad through Apple's private MultitouchSupport
-framework, like BetterTouchTool does, since apps in the background don't get
-touch events otherwise.
+menu. They also have to land together, so a palm brushing the trackpad while
+two fingers scroll doesn't count as a third finger. macOS's own gestures with
+the same number of fingers still fire, so move those to another count in System
+Settings → Trackpad → More Gestures if they get in the way. This reads the
+trackpad through Apple's private MultitouchSupport framework, like
+BetterTouchTool does, since apps in the background don't get touch events
+otherwise.
 
 Unless a system gesture uses the same fingers, macOS also turns their movement
 into a scroll, which would coast on into the app you just switched to. Give the

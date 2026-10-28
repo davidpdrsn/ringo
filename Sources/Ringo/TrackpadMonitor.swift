@@ -124,6 +124,9 @@ struct TrackpadGesture {
     /// The fingers have to stay down this long before the menu opens, so putting
     /// down or lifting more fingers (which passes through fewer) doesn't flash it.
     static let settleTime: CFTimeInterval = 0.05
+    /// All the fingers have to land within this long of the first one, so a palm
+    /// brushing the trackpad while two fingers scroll doesn't count as a third.
+    static let landingTime: CFTimeInterval = 0.15
     /// How far the pointer moves per millimeter the fingers move.
     static let pointsPerMillimeter: CGFloat = 4
 
@@ -132,6 +135,8 @@ struct TrackpadGesture {
 
     private enum State {
         case idle
+        /// Some fingers are down, but not enough yet.
+        case landing(device: UInt, since: CFTimeInterval)
         case settling(device: UInt, start: CGPoint, since: CFTimeInterval)
         case active(device: UInt, start: CGPoint)
         /// Ignores everything until all fingers have lifted.
@@ -152,6 +157,20 @@ struct TrackpadGesture {
             if frame.fingers == fingers {
                 state = .settling(device: frame.device, start: frame.centroid, since: time)
             } else if frame.fingers > fingers {
+                state = .blocked
+            } else if frame.fingers > 0 {
+                state = .landing(device: frame.device, since: time)
+            }
+            return []
+
+        case .landing(let device, let since):
+            guard frame.device == device else { return [] }
+            if frame.fingers == 0 {
+                state = .idle
+            } else if frame.fingers == fingers, time - since <= Self.landingTime {
+                state = .settling(device: device, start: frame.centroid, since: time)
+            } else if frame.fingers >= fingers {
+                // Too late to be part of the same touch.
                 state = .blocked
             }
             return []
