@@ -149,7 +149,10 @@ extension Config {
             ConfigEdit(table: "outer_ring", key: "blur_radius", value: outerRing.blurRadius.map(number)),
         ]
             + highlight(outerRing.highlight, in: "outer_ring.highlight")
-            + [ConfigEdit(table: "inner_ring", key: "color", value: color(innerRing.color))]
+            + [
+                ConfigEdit(table: "inner_ring", key: "color", value: color(innerRing.color)),
+                ConfigEdit(table: "inner_ring", key: "switch_back_color", value: color(innerRing.switchBackColor)),
+            ]
             + highlight(innerRing.highlight, in: "inner_ring.highlight")
     }
 

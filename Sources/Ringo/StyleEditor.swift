@@ -109,8 +109,10 @@ private struct StyleEditorView: View {
             VStack(spacing: 8) {
                 MenuPreview(config: model.edited, items: model.items, replays: model.replays)
                     .frame(minWidth: 460, minHeight: 460)
-                Text("Move the mouse over the preview to point the highlights.")
+                Text("Move the mouse over the preview to point the highlights, or to the middle for the switch back color.")
                     .font(.callout)
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal)
                     .foregroundStyle(.secondary)
                     .padding(.bottom, 12)
             }
@@ -142,6 +144,11 @@ private struct StyleEditorView: View {
                     )
                     Section("Inner ring") {
                         ColorRow("Color", color: $model.edited.innerRing.color, fallback: NSColor.white.withAlphaComponent(0.55).cgColor)
+                        ColorRow(
+                            "Switch back color",
+                            color: $model.edited.innerRing.switchBackColor,
+                            fallback: InnerRing.defaultSwitchBackColor.cgColor
+                        )
                     }
                     HighlightSection(
                         "Inner ring highlight",
@@ -307,7 +314,8 @@ private struct MenuPreview: NSViewRepresentable {
 }
 
 /// The menu, open in the middle of the view. The highlights follow the mouse
-/// while it's over the view, and otherwise point at the first app.
+/// while it's over the view, and otherwise point at the first app. With the
+/// mouse in the middle, the inner ring shows its switch back color.
 @MainActor
 private final class MenuPreviewView: NSView {
     private let menuView = RadialMenuView()
@@ -414,6 +422,7 @@ private final class MenuPreviewView: NSView {
                 offset = CGPoint(x: mouse.x - bounds.midX, y: mouse.y - bounds.midY)
             }
         }
-        menuView.update(time: link.targetTimestamp, selection: layout.selection(for: offset), pointer: offset)
+        let selection = layout.selection(for: offset)
+        menuView.update(time: link.targetTimestamp, selection: selection, pointer: offset, switchingBack: selection == nil)
     }
 }

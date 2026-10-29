@@ -16,6 +16,9 @@ import QuartzCore
 /// - Resting fingers on the trackpad (`trackpad_fingers`) works the same way:
 ///   moving them picks a direction, lifting them switches, and adding a finger
 ///   cancels.
+/// - With `switch_back_tap_ms`, a quick tap of the hotkey, mouse button or
+///   fingers that doesn't point at an app switches back to the app in front
+///   before. The inner ring changes color while letting go would do that.
 @MainActor
 final class RadialMenuController: NSObject {
     private enum Phase {
@@ -25,9 +28,18 @@ final class RadialMenuController: NSObject {
         /// Opened without the hotkey (Preview Menu); stays until a click or Escape.
         case sticky
         /// Opened by fingers on the trackpad; lifting them decides.
-        case trackpad
+        case trackpad(openedAt: CFTimeInterval)
         /// Opened by holding an extra mouse button; releasing it decides.
-        case mouseButton
+        case mouseButton(openedAt: CFTimeInterval)
+
+        /// When the hotkey, mouse button or fingers went down, for telling a tap
+        /// from a hold.
+        var pressedAt: CFTimeInterval? {
+            switch self {
+            case .holding(let openedAt), .trackpad(let openedAt), .mouseButton(let openedAt): openedAt
+            case .closed, .sticky: nil
+            }
+        }
     }
 
     private var phase = Phase.closed
@@ -36,8 +48,10 @@ final class RadialMenuController: NSObject {
     private var hotkey: Hotkey?
     private var iconSize: CGFloat = 0
     private var moveCursorToWindow = true
+    private var switchBackTapDuration: CFTimeInterval?
     private let cursorMover = CursorMover()
     private let cursorHider = CursorHider()
+    private let recentApps = RecentApps()
 
     private let panel = RadialMenuPanel()
     private let menuView = RadialMenuView()
@@ -68,6 +82,7 @@ final class RadialMenuController: NSObject {
         hotkey = config.hotkey
         iconSize = config.iconSize
         moveCursorToWindow = config.moveCursorToWindow
+        switchBackTapDuration = config.switchBackTapDuration
         layout = RadialLayout(count: items.count, radius: config.radius, iconSize: config.iconSize)
         menuView.configure(items: items, layout: layout, config: config)
     }
@@ -90,9 +105,9 @@ final class RadialMenuController: NSObject {
     func handleMouseButton(_ event: HotKeyCenter.Event) {
         switch (event, phase) {
         case (.pressed, .closed):
-            open(.mouseButton)
+            open(.mouseButton(openedAt: CACurrentMediaTime()))
         case (.released, .mouseButton):
-            close(activating: layout.selection(for: pointerOffset()).map { items[$0] })
+            released()
         default:
             // Something else has the menu open.
             break
@@ -103,11 +118,11 @@ final class RadialMenuController: NSObject {
         switch (event, phase) {
         case (.began, .closed):
             trackpadOffset = .zero
-            open(.trackpad)
+            open(.trackpad(openedAt: CACurrentMediaTime()))
         case (.moved(let offset), .trackpad):
             trackpadOffset = offset
         case (.ended, .trackpad):
-            close(activating: layout.selection(for: trackpadOffset).map { items[$0] })
+            released()
         case (.cancelled, .trackpad):
             close()
         default:
@@ -154,18 +169,18 @@ final class RadialMenuController: NSObject {
         panel.orderFrontRegardless()
         NSCursor.arrow.set()
 
+        self.phase = phase
         let now = CACurrentMediaTime()
         let runningApps = NSWorkspace.shared.runningApplications
         let badges = items.map { item in
             item.runningApplication(in: runningApps).flatMap { DockBadge.label(for: $0.processIdentifier) }
         }
-        menuView.present(at: toView(center), badges: badges, time: now)
+        menuView.present(at: toView(center), badges: badges, time: now, switchingBack: isSwitchBackTap(at: now))
 
         let link = menuView.displayLink(target: self, selector: #selector(tick(_:)))
         link.add(to: .main, forMode: .common)
         displayLink = link
 
-        self.phase = phase
         if case .sticky = phase {
             escapeHotKey = try? HotKeyCenter.shared.register(KeyCombo(parsing: "escape")) { [weak self] event in
                 if event == .pressed { self?.close() }
@@ -204,6 +219,22 @@ final class RadialMenuController: NSObject {
         DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: work)
     }
 
+    /// Switches back to the app in front before the current one, like a quick ⌘Tab.
+    private func switchBack() {
+        guard let app = recentApps.previous else {
+            NSSound.beep()
+            return
+        }
+        // Like picking it from the menu, for its settings and so an app with no
+        // windows opens one.
+        if let item = items.first(where: { $0.runningApplication(in: [app]) != nil }) {
+            activate(item)
+        } else {
+            activate(app)
+            switched(to: app.processIdentifier, hideCursor: false)
+        }
+    }
+
     private func activate(_ item: MenuItem) {
         switch item.target {
         case .app(let url, _):
@@ -215,7 +246,7 @@ final class RadialMenuController: NSObject {
                 }
                 guard let pid = app?.processIdentifier else { return }
                 DispatchQueue.main.async {
-                    MainActor.assumeIsolated { self?.switched(to: item, pid: pid) }
+                    MainActor.assumeIsolated { self?.switched(to: pid, hideCursor: item.hideCursor) }
                 }
             }
         case .process:
@@ -223,19 +254,26 @@ final class RadialMenuController: NSObject {
                 NSSound.beep()
                 return
             }
-            // Since macOS 14 a background app's request to activate another app is
-            // ignored, unless it asks to be active itself and hands activation over.
-            NSApp.activate()
-            NSApp.yieldActivation(to: app)
-            app.activate(from: .current, options: [])
-            switched(to: item, pid: app.processIdentifier)
+            activate(app)
+            switched(to: app.processIdentifier, hideCursor: item.hideCursor)
         }
     }
 
-    private func switched(to item: MenuItem, pid: pid_t) {
+    private func activate(_ app: NSRunningApplication) {
+        if app.isHidden {
+            app.unhide()
+        }
+        // Since macOS 14 a background app's request to activate another app is
+        // ignored, unless it asks to be active itself and hands activation over.
+        NSApp.activate()
+        NSApp.yieldActivation(to: app)
+        app.activate(from: .current, options: [])
+    }
+
+    private func switched(to pid: pid_t, hideCursor: Bool) {
         // The menu may have opened again while the app was launching.
         guard !isOpen else { return }
-        if item.hideCursor {
+        if hideCursor {
             cursorHider.hide(while: pid)
         }
         if moveCursorToWindow {
@@ -261,7 +299,13 @@ final class RadialMenuController: NSObject {
         }
 
         let offset = pointerOffset()
-        menuView.update(time: link.targetTimestamp, selection: layout.selection(for: offset), pointer: offset)
+        let selection = layout.selection(for: offset)
+        menuView.update(
+            time: link.targetTimestamp,
+            selection: selection,
+            pointer: offset,
+            switchingBack: selection == nil && isSwitchBackTap(at: link.targetTimestamp)
+        )
     }
 
     private func triggerReleased() {
@@ -269,8 +313,27 @@ final class RadialMenuController: NSObject {
         if wasUsedForTyping(since: openedAt) {
             close()
         } else {
-            close(activating: layout.selection(for: pointerOffset()).map { items[$0] })
+            released()
         }
+    }
+
+    /// Switches to the app the pointer points at. Otherwise cancels, or after a
+    /// quick tap switches back to the previous app.
+    private func released() {
+        let selection = layout.selection(for: pointerOffset())
+        if selection == nil && isSwitchBackTap(at: CACurrentMediaTime()) {
+            close()
+            switchBack()
+        } else {
+            close(activating: selection.map { items[$0] })
+        }
+    }
+
+    /// Whether the press is still short enough that letting go without pointing
+    /// at an app switches back.
+    private func isSwitchBackTap(at time: CFTimeInterval) -> Bool {
+        guard let switchBackTapDuration, let pressedAt = phase.pressedAt else { return false }
+        return time - pressedAt < switchBackTapDuration
     }
 
     /// Whether a modifier-only hotkey has been combined with other keys since

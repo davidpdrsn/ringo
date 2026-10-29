@@ -14,6 +14,9 @@ one and let go to switch to it.
 - **Release in the middle** cancels. The menu only stays open while the hotkey
   is held.
 - **Click** while holding also switches. Right click cancels.
+- **Tap** the hotkey (or the trackpad fingers) to switch back to the app you
+  were in before, like a quick ⌘Tab, if you turn on `switch_back_tap_ms` (see
+  Configuration).
 
 Picking an app that isn't running launches it. Apps show the same badge they
 have in the Dock, like an unread count.
@@ -58,6 +61,10 @@ hotkey = "option+space"
 # How long the icons take to fan out when the menu opens, in milliseconds.
 open_animation_ms = 180
 
+# A press of the hotkey shorter than this, in milliseconds, switches back to the
+# previous app. Off by default.
+switch_back_tap_ms = 200
+
 # How far the icons are from the cursor, and their size, in points.
 [icons]
 radius = 110
@@ -97,6 +104,7 @@ glow_opacity = 0.3    # from 0 to 1
 # The small circle in the middle, a translucent white by default.
 [inner_ring]
 color = "#FFFFFF8C"
+switch_back_color = "#FFA000" # while a tap would switch back; amber orange by default
 
 # Takes the same settings as the outer ring's highlight. These are its defaults.
 [inner_ring.highlight]
@@ -151,7 +159,8 @@ macOS allows, so remappers like LinearMouse don't get to change it first.
 
 **Trackpad**: `trackpad_fingers = 3` (or 4 or 5) also opens the menu when that
 many fingers rest on the trackpad. Slide them toward an app and lift to switch;
-lifting without moving cancels, and adding a finger cancels too. The fingers
+lifting without moving cancels (or switches back, after a quick tap with
+`switch_back_tap_ms`), and adding a finger cancels too. The fingers
 have to settle for a moment first, so gestures with more fingers don't flash the
 menu. They also have to land together, so a palm brushing the trackpad while
 two fingers scroll doesn't count as a third finger. macOS's own gestures with
@@ -167,6 +176,22 @@ app the Accessibility permission (it asks on launch) and it drops that scroll.
 Builds are signed with your Apple Development certificate when you have one, so
 the permission survives rebuilds; with ad-hoc signing you'd have to grant it
 again after every `just install`.
+
+**Switching back**: `switch_back_tap_ms = 200` makes a quick tap of the hotkey,
+click of the mouse button, or tap of the trackpad fingers switch back to the app
+that was in front before the current one, like a quick ⌘Tab. A press counts as a
+tap when it's shorter than that many milliseconds and doesn't point at an app;
+hold it longer and the menu works as usual, so letting go in the middle still
+cancels. On the trackpad the time counts from when the menu opens, once the
+fingers have settled. While letting go would switch back, the inner ring takes
+`switch_back_color` (under `[inner_ring]`), an amber orange by default. It goes
+back to normal once the time is up, or when you point at an app.
+
+"Before" counts every switch, not just those made with Ringo, so an app you went
+to with ⌘Tab or the Dock counts too. Menu bar apps and launchers like Raycast
+are skipped. If the app is on the ring, switching back works like picking it
+there, `hide_cursor` included. If macOS has a gesture for a tap with the same
+number of fingers, like Look Up, it fires too.
 
 **Cursor**: after switching, the cursor moves to the middle of the app's front
 window, once the app is in front. Set `move_cursor_to_window = false` to leave it
