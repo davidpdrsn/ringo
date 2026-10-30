@@ -13,7 +13,7 @@ one and let go to switch to it.
   need to reach the icon; only the direction matters.
 - **Release in the middle** cancels. The menu only stays open while the hotkey
   is held.
-- **Click** while holding also switches. Right click cancels.
+- **Click** while holding also switches. Right click or Escape cancels.
 - **Tap** the hotkey (or the trackpad fingers) to switch back to the app you
   were in before, like a quick ⌘Tab, if you turn on `switch_back_tap_ms` (see
   Configuration).

@@ -8,7 +8,7 @@ import QuartzCore
 /// - Releasing the key (or any of its modifiers) switches to the app the cursor
 ///   points at, or cancels if the cursor is still in the dead zone.
 /// - Left click picks the app the cursor points at, or cancels from the center.
-/// - Right click cancels.
+/// - Right click or Escape cancels.
 /// - With a modifier-only hotkey, typing a key or pressing another modifier
 ///   while holding it cancels, since that's someone typing ⌥E or using a
 ///   shortcut rather than reaching for the menu.
@@ -56,7 +56,7 @@ final class RadialMenuController: NSObject {
     private let panel = RadialMenuPanel()
     private let menuView = RadialMenuView()
     private var displayLink: CADisplayLink?
-    private var escapeHotKey: HotKeyRegistration?
+    private var escapeHotKeys: [HotKeyRegistration] = []
     /// The menu's center in global AppKit screen coordinates.
     private var center: CGPoint = .zero
     /// How far the fingers have moved, standing in for the cursor in `.trackpad`.
@@ -181,8 +181,27 @@ final class RadialMenuController: NSObject {
         link.add(to: .main, forMode: .common)
         displayLink = link
 
-        if case .sticky = phase {
-            escapeHotKey = try? HotKeyCenter.shared.register(KeyCombo(parsing: "escape")) { [weak self] event in
+        registerEscape()
+    }
+
+    /// Lets Escape cancel. Carbon hotkeys only match the exact modifiers, and
+    /// the hotkey's are still down while it's held, so Escape is registered both
+    /// on its own and with those.
+    private func registerEscape() {
+        guard let escape = try? KeyCombo(parsing: "escape") else { return }
+        var combos = [escape]
+        if let modifiers = hotkey?.modifiers, !modifiers.isEmpty {
+            var held = escape
+            held.modifiers = modifiers
+            combos.append(held)
+        }
+        escapeHotKeys = combos.compactMap { combo in
+            // Escape may be the hotkey itself, which handles its own press and release.
+            if case .combo(let hotkeyCombo) = hotkey,
+               hotkeyCombo.keyCode == combo.keyCode, hotkeyCombo.modifiers == combo.modifiers {
+                return nil
+            }
+            return try? HotKeyCenter.shared.register(combo) { [weak self] event in
                 if event == .pressed { self?.close() }
             }
         }
@@ -193,8 +212,10 @@ final class RadialMenuController: NSObject {
         phase = .closed
         displayLink?.invalidate()
         displayLink = nil
-        escapeHotKey?.unregister()
-        escapeHotKey = nil
+        for registration in escapeHotKeys {
+            registration.unregister()
+        }
+        escapeHotKeys = []
 
         NSAnimationContext.runAnimationGroup { context in
             context.duration = 0.1

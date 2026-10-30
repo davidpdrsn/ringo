@@ -154,12 +154,14 @@ enum Hotkey: Equatable, CustomStringConvertible {
     }
 
     /// The modifiers that have to stay down while the menu is held open.
-    var modifierFlags: NSEvent.ModifierFlags {
+    var modifiers: KeyCombo.Modifiers {
         switch self {
-        case .combo(let combo): combo.modifierFlags
-        case .modifier(let key): key.modifierFlags
+        case .combo(let combo): combo.modifiers
+        case .modifier(let key): key.modifier
         }
     }
+
+    var modifierFlags: NSEvent.ModifierFlags { modifiers.flags }
 
     var description: String {
         switch self {
