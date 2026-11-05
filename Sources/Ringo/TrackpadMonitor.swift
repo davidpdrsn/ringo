@@ -15,6 +15,8 @@ final class TrackpadMonitor {
     private let multitouch: MultitouchSupport
     private let handler: (TrackpadGesture.Event) -> Void
     private var gesture: TrackpadGesture
+    /// Each trackpad has its own contacts, and so its own filter.
+    private var restingFilters: [UInt: RestingTouchFilter] = [:]
     private let scrollBlocker = ScrollBlocker()
     private var deviceList: CFArray?
     /// Each trackpad and its surface size in millimeters.
@@ -59,6 +61,7 @@ final class TrackpadMonitor {
 
     private func startDevices() {
         gesture.reset()
+        restingFilters = [:]
         guard let list = multitouch.createList()?.takeRetainedValue() else { return }
         deviceList = list
         for device in list as [AnyObject] {
@@ -82,11 +85,14 @@ final class TrackpadMonitor {
         deviceList = nil
     }
 
-    fileprivate static func handle(_ frame: TouchFrame) {
+    fileprivate static func handle(device: UInt, contacts: [TouchContact]) {
         guard let monitor = current else { return }
-        let size = monitor.devices.first { UInt(bitPattern: $0.ref) == frame.device }?.size
+        let size = monitor.devices.first { UInt(bitPattern: $0.ref) == device }?.size
             ?? CGSize(width: 125, height: 77)
-        for event in monitor.gesture.process(frame, surfaceSize: size, at: CACurrentMediaTime()) {
+        let time = CACurrentMediaTime()
+        let frame = monitor.restingFilters[device, default: RestingTouchFilter(fingers: monitor.fingers)]
+            .frame(device: device, contacts: contacts, surfaceSize: size, at: time)
+        for event in monitor.gesture.process(frame, surfaceSize: size, at: time) {
             switch event {
             case .began: monitor.scrollBlocker.gestureBegan()
             case .ended, .cancelled: monitor.scrollBlocker.gestureEnded()
@@ -95,6 +101,79 @@ final class TrackpadMonitor {
             monitor.handler(event)
         }
         monitor.scrollBlocker.fingersChanged(to: frame.fingers)
+    }
+}
+
+/// One thing touching a trackpad, which may or may not be a finger.
+struct TouchContact: Sendable {
+    /// Stays the same from the moment it lands until it lifts.
+    var id: Int32
+    /// 0...1 with the origin at the bottom left.
+    var position: CGPoint
+}
+
+/// Leaves out palms and thumbs resting on the trackpad.
+///
+/// `NSTouch.isResting` would say which touches these are, but only to a view in
+/// the foreground. MultitouchSupport doesn't flag them, so this works it out: the
+/// fingers of a gesture land together, so a contact that's still sitting there
+/// once they should all have landed, with too few others to make up the gesture,
+/// can't be part of one. It stays left out until it lifts, so a palm rolling
+/// around doesn't turn back into a finger.
+struct RestingTouchFilter {
+    /// A contact moving less than this many millimeters counts as sitting still.
+    static let stillDistance: CGFloat = 3
+
+    let fingers: Int
+    private var tracked: [Int32: Tracked] = [:]
+
+    private struct Tracked {
+        /// Where it last stopped moving, in millimeters.
+        var anchor: CGPoint
+        var still: CFTimeInterval
+        var isResting = false
+    }
+
+    init(fingers: Int) {
+        self.fingers = fingers
+    }
+
+    mutating func frame(
+        device: UInt,
+        contacts: [TouchContact],
+        surfaceSize: CGSize,
+        at time: CFTimeInterval
+    ) -> TouchFrame {
+        var current: [Int32: Tracked] = [:]
+        for contact in contacts {
+            let position = CGPoint(
+                x: contact.position.x * surfaceSize.width,
+                y: contact.position.y * surfaceSize.height
+            )
+            var touch = tracked[contact.id] ?? Tracked(anchor: position, still: time)
+            if hypot(position.x - touch.anchor.x, position.y - touch.anchor.y) > Self.stillDistance {
+                touch.anchor = position
+                touch.still = time
+            }
+            current[contact.id] = touch
+        }
+        // With enough fingers down they may be holding still on purpose, with the
+        // menu open.
+        if current.values.count(where: { !$0.isResting }) < fingers {
+            for (id, touch) in current where time - touch.still > TrackpadGesture.landingTime {
+                current[id]?.isResting = true
+            }
+        }
+        tracked = current
+
+        let remaining = contacts.filter { current[$0.id]?.isResting == false }
+        let sum = remaining.reduce(CGPoint.zero) { CGPoint(x: $0.x + $1.position.x, y: $0.y + $1.position.y) }
+        let count = CGFloat(remaining.count)
+        return TouchFrame(
+            device: device,
+            fingers: remaining.count,
+            centroid: remaining.isEmpty ? .zero : CGPoint(x: sum.x / count, y: sum.y / count)
+        )
     }
 }
 
@@ -309,24 +388,21 @@ private func contactFrameCallback(
     _: Double,
     _: Int32
 ) -> Int32 {
-    var fingers = 0
-    var sum = CGPoint.zero
+    var contacts: [TouchContact] = []
     if let touches, count > 0 {
         let touches = touches.assumingMemoryBound(to: MTTouch.self)
         for touch in UnsafeBufferPointer(start: touches, count: Int(count)) where touch.isTouching {
-            fingers += 1
-            sum.x += CGFloat(touch.normalized.position.x)
-            sum.y += CGFloat(touch.normalized.position.y)
+            let position = touch.normalized.position
+            contacts.append(TouchContact(
+                id: touch.pathIndex,
+                position: CGPoint(x: CGFloat(position.x), y: CGFloat(position.y))
+            ))
         }
     }
-    let frame = TouchFrame(
-        device: UInt(bitPattern: device),
-        fingers: fingers,
-        centroid: fingers > 0 ? CGPoint(x: sum.x / CGFloat(fingers), y: sum.y / CGFloat(fingers)) : .zero
-    )
-    DispatchQueue.main.async {
+    let device = UInt(bitPattern: device)
+    DispatchQueue.main.async { [contacts] in
         MainActor.assumeIsolated {
-            TrackpadMonitor.handle(frame)
+            TrackpadMonitor.handle(device: device, contacts: contacts)
         }
     }
     return 0

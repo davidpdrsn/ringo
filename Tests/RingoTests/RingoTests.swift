@@ -395,6 +395,109 @@ import Testing
     }
 }
 
+@Suite struct RestingTouchFilterTests {
+    let surface = CGSize(width: 100, height: 50)
+    let palm = TouchContact(id: 9, position: CGPoint(x: 0.5, y: 0.1))
+    var fingers: [TouchContact] {
+        (1...3).map { TouchContact(id: Int32($0), position: CGPoint(x: 0.2 * Double($0), y: 0.8)) }
+    }
+
+    func frame(
+        _ filter: inout RestingTouchFilter,
+        _ contacts: [TouchContact],
+        at time: CFTimeInterval
+    ) -> TouchFrame {
+        filter.frame(device: 1, contacts: contacts, surfaceSize: surface, at: time)
+    }
+
+    @Test func aPalmSittingStillIsLeftOut() {
+        var filter = RestingTouchFilter(fingers: 3)
+        #expect(frame(&filter, [palm], at: 0).fingers == 1)
+        #expect(frame(&filter, [palm], at: 0.1).fingers == 1)
+        #expect(frame(&filter, [palm], at: 0.2).fingers == 0)
+
+        let touch = frame(&filter, [palm] + fingers, at: 1)
+        #expect(touch.fingers == 3)
+        // The palm doesn't drag the centroid down either.
+        #expect(abs(touch.centroid.x - 0.4) < 0.0001)
+        #expect(abs(touch.centroid.y - 0.8) < 0.0001)
+    }
+
+    @Test func aPalmLandingWithTheFingersOnlyBlocksThatTouch() {
+        var filter = RestingTouchFilter(fingers: 3)
+        var gesture = TrackpadGesture(fingers: 3)
+        func process(_ contacts: [TouchContact], at time: CFTimeInterval) -> [TrackpadGesture.Event] {
+            gesture.process(frame(&filter, contacts, at: time), surfaceSize: surface, at: time)
+        }
+
+        // The palm lands together with the fingers, so that touch is blocked.
+        #expect(process([palm] + fingers, at: 0).isEmpty)
+        #expect(process([palm] + fingers, at: 0.5).isEmpty)
+        // The next one works, without having to lift the palm.
+        #expect(process([palm], at: 1).isEmpty)
+        #expect(process([palm], at: 1.2).isEmpty)
+        #expect(process([palm] + fingers, at: 2).isEmpty)
+        #expect(process([palm] + fingers, at: 2.1).first == .began)
+        #expect(process([palm], at: 2.5) == [.ended])
+    }
+
+    @Test func aPalmJoiningAScrollStillDoesNothing() {
+        var filter = RestingTouchFilter(fingers: 3)
+        var gesture = TrackpadGesture(fingers: 3)
+        func scrolling(_ step: Int) -> [TouchContact] {
+            (1...2).map { TouchContact(id: Int32($0), position: CGPoint(x: 0.2 * Double($0), y: 0.1 * Double(step))) }
+        }
+        func process(_ contacts: [TouchContact], at time: CFTimeInterval) -> [TrackpadGesture.Event] {
+            gesture.process(frame(&filter, contacts, at: time), surfaceSize: surface, at: time)
+        }
+
+        #expect(process(scrolling(0), at: 0).isEmpty)
+        #expect(process(scrolling(1), at: 0.1).isEmpty)
+        #expect(process(scrolling(2), at: 0.2).isEmpty)
+        #expect(process(scrolling(3) + [palm], at: 0.3).isEmpty)
+        #expect(process(scrolling(4) + [palm], at: 0.4).isEmpty)
+        #expect(process(scrolling(5) + [palm], at: 0.5).isEmpty)
+    }
+
+    @Test func fingersHoldingStillStayFingers() {
+        var filter = RestingTouchFilter(fingers: 3)
+        #expect(frame(&filter, fingers, at: 0).fingers == 3)
+        #expect(frame(&filter, fingers, at: 5).fingers == 3)
+    }
+
+    @Test func moreFingersThanTheGestureStayFingers() {
+        var filter = RestingTouchFilter(fingers: 3)
+        let four = fingers + [TouchContact(id: 4, position: CGPoint(x: 0.8, y: 0.8))]
+        #expect(frame(&filter, four, at: 0).fingers == 4)
+        #expect(frame(&filter, four, at: 5).fingers == 4)
+    }
+
+    @Test func aMovingFingerStaysAFinger() {
+        var filter = RestingTouchFilter(fingers: 3)
+        for step in 0...10 {
+            // 5 mm every 0.1 s.
+            let contact = TouchContact(id: 1, position: CGPoint(x: 0.05 * Double(step), y: 0.5))
+            #expect(frame(&filter, [contact], at: 0.1 * Double(step)).fingers == 1)
+        }
+    }
+
+    @Test func aRestingPalmStaysLeftOutWhenItMoves() {
+        var filter = RestingTouchFilter(fingers: 3)
+        _ = frame(&filter, [palm], at: 0)
+        _ = frame(&filter, [palm], at: 0.2)
+        let rolled = TouchContact(id: palm.id, position: CGPoint(x: 0.7, y: 0.3))
+        #expect(frame(&filter, [rolled], at: 0.3).fingers == 0)
+    }
+
+    @Test func aContactCountsAgainAfterLifting() {
+        var filter = RestingTouchFilter(fingers: 3)
+        _ = frame(&filter, [palm], at: 0)
+        #expect(frame(&filter, [palm], at: 0.2).fingers == 0)
+        _ = frame(&filter, [], at: 0.3)
+        #expect(frame(&filter, [palm], at: 0.4).fingers == 1)
+    }
+}
+
 @Suite struct TrackpadGestureTests {
     let surface = CGSize(width: 100, height: 50)
 
