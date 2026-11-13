@@ -751,6 +751,36 @@ import Testing
         #expect(history.previous(before: nil) == 2)
     }
 
+    @Test func listsRecentAppsWithoutTheFrontmost() {
+        var history = AppHistory<Int>()
+        history.activated(1)
+        history.activated(2)
+        history.activated(3)
+        // 4 and 5 are running but haven't been in front, so they go last in the
+        // order they're running in.
+        #expect(history.recent(before: 3, running: [5, 1, 4, 2, 3]) == [2, 1, 5, 4])
+        #expect(history.recent(before: nil, running: [1, 2, 3]) == [3, 2, 1])
+    }
+
+    @Test func recentAppsKeepTheirPlaces() {
+        var slots = RecentSlots<Int>()
+        // Fills in order of recency, padded to the minimum.
+        #expect(slots.place([3, 1, 2]) == [3, 1, 2, nil, nil, nil, nil, nil])
+        // Switching around doesn't move anyone.
+        #expect(slots.place([2, 3, 1]) == [3, 1, 2, nil, nil, nil, nil, nil])
+        // One that quits leaves a gap, which the next new app takes.
+        #expect(slots.place([2, 3]) == [3, nil, 2, nil, nil, nil, nil, nil])
+        #expect(slots.place([4, 5, 2, 3]) == [3, 4, 2, 5, nil, nil, nil, nil])
+    }
+
+    @Test func recentAppsGrowTheRingInSteps() {
+        var slots = RecentSlots<Int>()
+        #expect(slots.place(Array(1...9)).count == 12)
+        #expect(slots.place(Array(1...12)).count == 12)
+        // Shrinks back once the last places are empty.
+        #expect(slots.place(Array(1...5)) == [1, 2, 3, 4, 5, nil, nil, nil])
+    }
+
     @MainActor
     @Test func matchesTheSameAppLookedUpAgain() throws {
         // Running apps are compared rather than pids, which a process started

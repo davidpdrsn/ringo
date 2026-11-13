@@ -70,6 +70,9 @@ func checkConfig(at url: URL) -> Int32 {
                 print("  ✓ \(item.title) — \(url.path)\(badge)")
             case .process(let name):
                 print("  ✓ \(item.title) — process \"\(name)\" (\(app != nil ? "running" : "not running"))\(badge)")
+            case .running:
+                // Only made for the ring of recent apps, never from the config.
+                break
             }
         } catch {
             failed = true

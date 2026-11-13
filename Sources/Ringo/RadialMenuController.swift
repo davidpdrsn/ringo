@@ -9,6 +9,9 @@ import QuartzCore
 ///   points at, or cancels if the cursor is still in the dead zone.
 /// - Left click picks the app the cursor points at, or cancels from the center.
 /// - Right click or Escape cancels.
+/// - Tab swaps the configured apps for the other running ones, most recent
+///   first, and back. The configured ring always opens first, so its apps keep
+///   their places.
 /// - With a modifier-only hotkey, typing a key or pressing another modifier
 ///   while holding it cancels, since that's someone typing ⌥E or using a
 ///   shortcut rather than reaching for the menu.
@@ -42,9 +45,30 @@ final class RadialMenuController: NSObject {
         }
     }
 
+    private enum Ring {
+        case apps
+        case recent
+    }
+
     private var phase = Phase.closed
-    private var items: [MenuItem] = []
+    private var config: Config?
+    /// The configured apps.
+    private var appItems: [MenuItem] = []
+    private var appLayout = RadialLayout(count: 0, radius: 0, iconSize: 0)
+    /// Which apps the ring shows, and the app in each place around it (`nil`
+    /// for an empty one).
+    private var ring = Ring.apps
+    private var items: [MenuItem?] = []
+    /// Where each recent app goes, kept between openings so they stay put.
+    private var recentSlots = RecentSlots<NSRunningApplication>()
     private var layout = RadialLayout(count: 0, radius: 0, iconSize: 0)
+    /// Whether Tab has swapped the ring since it opened, which rules out a tap.
+    private var switchedRings = false
+    /// Whether Tab is held, so its key repeats don't swap the ring again.
+    private var tabIsDown = false
+    /// When Tab last went down or up, so a modifier-only hotkey doesn't take it
+    /// for typing.
+    private var lastTabEventAt: CFTimeInterval = 0
     private var hotkey: Hotkey?
     private var iconSize: CGFloat = 0
     private var moveCursorToWindow = true
@@ -56,7 +80,8 @@ final class RadialMenuController: NSObject {
     private let panel = RadialMenuPanel()
     private let menuView = RadialMenuView()
     private var displayLink: CADisplayLink?
-    private var escapeHotKeys: [HotKeyRegistration] = []
+    /// Escape and Tab, registered while the menu is open.
+    private var menuHotKeys: [HotKeyRegistration] = []
     /// The menu's center in global AppKit screen coordinates.
     private var center: CGPoint = .zero
     /// How far the fingers have moved, standing in for the cursor in `.trackpad`.
@@ -78,12 +103,16 @@ final class RadialMenuController: NSObject {
 
     func configure(items: [MenuItem], config: Config) {
         if isOpen { close() }
+        self.config = config
+        appItems = items
+        ring = .apps
         self.items = items
         hotkey = config.hotkey
         iconSize = config.iconSize
         moveCursorToWindow = config.moveCursorToWindow
         switchBackTapDuration = config.switchBackTapDuration
         layout = RadialLayout(count: items.count, radius: config.radius, iconSize: config.iconSize)
+        appLayout = layout
         menuView.configure(items: items, layout: layout, config: config)
     }
 
@@ -140,10 +169,19 @@ final class RadialMenuController: NSObject {
     // MARK: - Opening and closing
 
     private func open(_ phase: Phase) {
-        guard !items.isEmpty else {
+        guard !appItems.isEmpty, let config else {
             NSSound.beep()
             return
         }
+
+        if ring != .apps {
+            ring = .apps
+            items = appItems
+            layout = appLayout
+            menuView.configure(items: items, layout: layout, config: config)
+        }
+        switchedRings = false
+        tabIsDown = false
 
         // Don't move the cursor from under the menu if the last switch is still waiting.
         cursorMover.cancel()
@@ -171,40 +209,98 @@ final class RadialMenuController: NSObject {
 
         self.phase = phase
         let now = CACurrentMediaTime()
-        let runningApps = NSWorkspace.shared.runningApplications
-        let badges = items.map { item in
-            item.runningApplication(in: runningApps).flatMap { DockBadge.label(for: $0.processIdentifier) }
-        }
-        menuView.present(at: toView(center), badges: badges, time: now, switchingBack: isSwitchBackTap(at: now))
+        menuView.present(at: toView(center), badges: badges(for: items), time: now, switchingBack: isSwitchBackTap(at: now))
 
         let link = menuView.displayLink(target: self, selector: #selector(tick(_:)))
         link.add(to: .main, forMode: .common)
         displayLink = link
 
-        registerEscape()
+        register("escape") { [weak self] event in
+            if event == .pressed { self?.close() }
+        }
+        register("tab") { [weak self] event in
+            self?.tab(event)
+        }
     }
 
-    /// Lets Escape cancel. Carbon hotkeys only match the exact modifiers, and
-    /// the hotkey's are still down while it's held, so Escape is registered both
-    /// on its own and with those.
-    private func registerEscape() {
-        guard let escape = try? KeyCombo(parsing: "escape") else { return }
-        var combos = [escape]
+    /// Registers `key` for while the menu is open. Carbon hotkeys only match the
+    /// exact modifiers, and the hotkey's are still down while it's held, so it's
+    /// registered both on its own and with those.
+    private func register(_ key: String, handler: @escaping (HotKeyCenter.Event) -> Void) {
+        guard let plain = try? KeyCombo(parsing: key) else { return }
+        var combos = [plain]
         if let modifiers = hotkey?.modifiers, !modifiers.isEmpty {
-            var held = escape
+            var held = plain
             held.modifiers = modifiers
             combos.append(held)
         }
-        escapeHotKeys = combos.compactMap { combo in
-            // Escape may be the hotkey itself, which handles its own press and release.
+        menuHotKeys += combos.compactMap { combo in
+            // The key may be the hotkey itself, which handles its own press and release.
             if case .combo(let hotkeyCombo) = hotkey,
                hotkeyCombo.keyCode == combo.keyCode, hotkeyCombo.modifiers == combo.modifiers {
                 return nil
             }
-            return try? HotKeyCenter.shared.register(combo) { [weak self] event in
-                if event == .pressed { self?.close() }
-            }
+            return try? HotKeyCenter.shared.register(combo, handler: handler)
         }
+    }
+
+    private func badges(for items: [MenuItem?]) -> [String?] {
+        let runningApps = NSWorkspace.shared.runningApplications
+        return items.map { item in
+            item?.runningApplication(in: runningApps).flatMap { DockBadge.label(for: $0.processIdentifier) }
+        }
+    }
+
+    // MARK: - Recent apps
+
+    private func tab(_ event: HotKeyCenter.Event) {
+        lastTabEventAt = CACurrentMediaTime()
+        switch event {
+        case .pressed:
+            guard !tabIsDown else { return }
+            tabIsDown = true
+            swapRing()
+        case .released:
+            tabIsDown = false
+        }
+    }
+
+    /// Swaps the configured apps for the recent ones, or back.
+    private func swapRing() {
+        guard isOpen, let config else { return }
+        switch ring {
+        case .apps:
+            // Those already in the configured ring are a flick away there.
+            let recent = recentApps.recent.filter { app in
+                !appItems.contains { $0.runningApplication(in: [app]) != nil }
+            }
+            guard !recent.isEmpty else {
+                NSSound.beep()
+                return
+            }
+            ring = .recent
+            items = recentSlots.place(recent).map { $0.map(MenuItem.init(running:)) }
+            layout = RadialLayout(count: items.count, radius: config.radius, iconSize: config.iconSize)
+        case .recent:
+            ring = .apps
+            items = appItems
+            layout = appLayout
+        }
+        switchedRings = true
+        menuView.show(
+            items: items,
+            layout: layout,
+            config: config,
+            badges: badges(for: items),
+            caption: ring == .recent ? "Recent" : nil,
+            time: CACurrentMediaTime()
+        )
+    }
+
+    /// The configured item for `app`, for its settings and so an app with no
+    /// windows opens one, or else one that just switches to it.
+    private func menuItem(for app: NSRunningApplication) -> MenuItem {
+        appItems.first { $0.runningApplication(in: [app]) != nil } ?? MenuItem(running: app)
     }
 
     private func close(activating item: MenuItem? = nil) {
@@ -212,10 +308,10 @@ final class RadialMenuController: NSObject {
         phase = .closed
         displayLink?.invalidate()
         displayLink = nil
-        for registration in escapeHotKeys {
+        for registration in menuHotKeys {
             registration.unregister()
         }
-        escapeHotKeys = []
+        menuHotKeys = []
 
         NSAnimationContext.runAnimationGroup { context in
             context.duration = 0.1
@@ -246,14 +342,7 @@ final class RadialMenuController: NSObject {
             NSSound.beep()
             return
         }
-        // Like picking it from the menu, for its settings and so an app with no
-        // windows opens one.
-        if let item = items.first(where: { $0.runningApplication(in: [app]) != nil }) {
-            activate(item)
-        } else {
-            activate(app)
-            switched(to: app.processIdentifier, hideCursor: false)
-        }
+        activate(menuItem(for: app))
     }
 
     private func activate(_ item: MenuItem) {
@@ -270,7 +359,7 @@ final class RadialMenuController: NSObject {
                     MainActor.assumeIsolated { self?.switched(to: pid, hideCursor: item.hideCursor) }
                 }
             }
-        case .process:
+        case .process, .running:
             guard let app = item.runningApplication(in: NSWorkspace.shared.runningApplications) else {
                 NSSound.beep()
                 return
@@ -320,7 +409,7 @@ final class RadialMenuController: NSObject {
         }
 
         let offset = pointerOffset()
-        let selection = layout.selection(for: offset)
+        let selection = selection(for: offset)
         menuView.update(
             time: link.targetTimestamp,
             selection: selection,
@@ -341,45 +430,51 @@ final class RadialMenuController: NSObject {
     /// Switches to the app the pointer points at. Otherwise cancels, or after a
     /// quick tap switches back to the previous app.
     private func released() {
-        let selection = layout.selection(for: pointerOffset())
+        let selection = selection(for: pointerOffset())
         if selection == nil && isSwitchBackTap(at: CACurrentMediaTime()) {
             close()
             switchBack()
         } else {
-            close(activating: selection.map { items[$0] })
+            close(activating: selection.flatMap { items[$0] })
         }
     }
 
     /// Whether the press is still short enough that letting go without pointing
     /// at an app switches back.
     private func isSwitchBackTap(at time: CFTimeInterval) -> Bool {
-        guard let switchBackTapDuration, let pressedAt = phase.pressedAt else { return false }
+        guard let switchBackTapDuration, let pressedAt = phase.pressedAt, !switchedRings else { return false }
         return time - pressedAt < switchBackTapDuration
     }
 
     /// Whether a modifier-only hotkey has been combined with other keys since
     /// `openedAt`. Doesn't apply to key combos, where the key itself counts as a
-    /// key press.
+    /// key press, or to Tab, which swaps the ring.
     private func wasUsedForTyping(since openedAt: CFTimeInterval) -> Bool {
-        guard case .modifier(let key) = hotkey else { return false }
+        guard case .modifier(let key) = hotkey, !tabIsDown else { return false }
         let otherModifiers = NSEvent.modifierFlags
             .intersection([.control, .option, .shift, .command])
             .subtracting(key.modifierFlags)
         let secondsSinceKeyDown = CGEventSource.secondsSinceLastEventType(.combinedSessionState, eventType: .keyDown)
-        return !otherModifiers.isEmpty || secondsSinceKeyDown < CACurrentMediaTime() - openedAt
+        let since = max(openedAt, lastTabEventAt)
+        return !otherModifiers.isEmpty || secondsSinceKeyDown < CACurrentMediaTime() - since
     }
 
     private func mouseDown(_ button: RadialMenuView.MouseButton) {
         guard isOpen else { return }
         switch button {
         case .left:
-            close(activating: layout.selection(for: pointerOffset()).map { items[$0] })
+            close(activating: selection(for: pointerOffset()).flatMap { items[$0] })
         case .right:
             close()
         }
     }
 
     // MARK: - Geometry
+
+    /// The place `offset` points at, unless it's empty.
+    private func selection(for offset: CGPoint) -> Int? {
+        layout.selection(for: offset).flatMap { items[$0] == nil ? nil : $0 }
+    }
 
     /// Where the user is pointing, relative to the menu's center.
     private func pointerOffset() -> CGPoint {

@@ -14,6 +14,12 @@ one and let go to switch to it.
 - **Release in the middle** cancels. The menu only stays open while the hotkey
   is held.
 - **Click** while holding also switches. Right click or Escape cancels.
+- **Tab** while the menu is open swaps your apps for the other ones running
+  right now, leaving out the app you're in. Tab again goes back. The menu always
+  opens on your own apps, so they keep their places. Other apps keep theirs
+  too: each takes the first free place, clockwise from 12 o'clock, and stays
+  there until it quits, leaving a gap for the next one. The ring has room for 8
+  and grows 4 at a time when it fills up.
 - **Tap** the hotkey (or the trackpad fingers) to switch back to the app you
   were in before, like a quick ⌘Tab, if you turn on `switch_back_tap_ms` (see
   Configuration).

@@ -15,7 +15,8 @@ final class RadialMenuView: NSView {
 
     var onMouseDown: ((MouseButton) -> Void)?
 
-    private var itemLayers: [ItemLayers] = []
+    /// One per place around the ring, `nil` for an empty one.
+    private var itemLayers: [ItemLayers?] = []
     private var layout = RadialLayout(count: 0, radius: 0, iconSize: 0)
     private var iconSize: CGFloat = 64
     private var selectedIconScale: CGFloat = 1.22
@@ -31,10 +32,16 @@ final class RadialMenuView: NSView {
 
     private var center: CGPoint = .zero
     private var openedAt: CFTimeInterval = 0
+    /// When the icons started fanning out, which is later than `openedAt` after
+    /// `show(items:layout:config:badges:caption:time:)`.
+    private var iconsShownAt: CFTimeInterval = 0
     private var lastFrameTime: CFTimeInterval?
     private var pointerOpacity: CGFloat = 0
     private var labelOpacity: CGFloat = 0
-    private var labelIndex: Int?
+    /// The text the label was last laid out for.
+    private var labelTitle: String?
+    /// Shown in the label while nothing is selected.
+    private var caption: String?
     /// How far the inner ring has gone to its switch-back color, from 0 to 1.
     private var switchBackAmount: CGFloat = 0
 
@@ -117,7 +124,8 @@ final class RadialMenuView: NSView {
 
     // MARK: - Setup
 
-    func configure(items: [MenuItem], layout: RadialLayout, config: Config) {
+    /// `items` has one entry per place around the ring, `nil` to leave it empty.
+    func configure(items: [MenuItem?], layout: RadialLayout, config: Config) {
         self.layout = layout
         iconSize = config.iconSize
         // Icons are drawn for their selected size, so this is set with them.
@@ -128,11 +136,11 @@ final class RadialMenuView: NSView {
         // would show.
         CATransaction.begin()
         CATransaction.setDisableActions(true)
-        for item in itemLayers {
+        for case let item? in itemLayers {
             item.container.removeFromSuperlayer()
         }
-        itemLayers = items.map { ItemLayers(item: $0, iconSize: iconSize) }
-        for item in itemLayers {
+        itemLayers = items.map { $0.map { ItemLayers(item: $0, iconSize: iconSize) } }
+        for case let item? in itemLayers {
             item.container.opacity = 0
             overlay.layer?.insertSublayer(item.container, below: labelBackground)
         }
@@ -199,10 +207,12 @@ final class RadialMenuView: NSView {
     func present(at center: CGPoint, badges: [String?], time: CFTimeInterval, switchingBack: Bool = false) {
         self.center = center
         openedAt = time
+        iconsShownAt = time
         lastFrameTime = nil
         pointerOpacity = 0
         labelOpacity = 0
-        labelIndex = nil
+        labelTitle = nil
+        caption = nil
         switchBackAmount = switchingBack ? 1 : 0
 
         CATransaction.begin()
@@ -211,7 +221,7 @@ final class RadialMenuView: NSView {
         let scale = window?.backingScaleFactor ?? 2
         if scale != rasterScale {
             rasterScale = scale
-            for item in itemLayers {
+            for case let item? in itemLayers {
                 item.rasterize(largestSize: iconSize * max(1, selectedIconScale), scale: scale)
             }
             for layer in [backdropTint, centerRing, switchBackRing, labelBackground, label] {
@@ -220,7 +230,7 @@ final class RadialMenuView: NSView {
             outerHighlight.setContentsScale(scale)
             innerHighlight.setContentsScale(scale)
         }
-        for (item, badge) in zip(itemLayers, badges) {
+        for case let (item?, badge) in zip(itemLayers, badges) {
             item.highlight = 0
             item.recede = 0
             item.setBadge(badge, iconSize: iconSize)
@@ -235,12 +245,30 @@ final class RadialMenuView: NSView {
         update(time: time, selection: nil, pointer: .zero, switchingBack: switchingBack)
     }
 
+    /// Swaps the icons for `items` while the menu is open, and fans them out
+    /// again without reopening the rings. `caption` is shown under the center
+    /// while nothing is selected.
+    func show(items: [MenuItem?], layout: RadialLayout, config: Config, badges: [String?], caption: String?, time: CFTimeInterval) {
+        configure(items: items, layout: layout, config: config)
+        iconsShownAt = time
+        self.caption = caption
+
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        let scale = window?.backingScaleFactor ?? 2
+        for case let (item?, badge) in zip(itemLayers, badges) {
+            item.rasterize(largestSize: iconSize * max(1, selectedIconScale), scale: scale)
+            item.setBadge(badge, iconSize: iconSize)
+        }
+        CATransaction.commit()
+    }
+
     /// Skips straight to how the pointer, label and icons look with `selection`,
     /// for a preview that's restyled while it's open.
     func settle(selection: Int?) {
         pointerOpacity = selection == nil ? 0 : 1
         labelOpacity = selection == nil ? 0 : 1
-        for (index, item) in itemLayers.enumerated() {
+        for case let (index, item?) in itemLayers.enumerated() {
             item.highlight = index == selection ? 1 : 0
             item.recede = selection != nil && index != selection ? 1 : 0
         }
@@ -254,6 +282,7 @@ final class RadialMenuView: NSView {
         let dt = lastFrameTime.map { min(time - $0, 0.1) } ?? 0
         lastFrameTime = time
         let elapsed = time - openedAt
+        let iconsElapsed = time - iconsShownAt
         let appear = easeOutCubic(progress(elapsed, duration: openDuration))
 
         CATransaction.begin()
@@ -278,8 +307,8 @@ final class RadialMenuView: NSView {
             ring.transform = CATransform3DMakeScale(appear, appear, 1)
         }
 
-        for (index, item) in itemLayers.enumerated() {
-            let t = progress(elapsed - Double(index) * openDuration * Self.staggerRatio, duration: openDuration)
+        for case let (index, item?) in itemLayers.enumerated() {
+            let t = progress(iconsElapsed - Double(index) * openDuration * Self.staggerRatio, duration: openDuration)
             let travel = easeOutBack(t)
             let offset = layout.offset(of: index)
             item.container.position = CGPoint(x: center.x + offset.x * travel, y: center.y + offset.y * travel)
@@ -311,9 +340,10 @@ final class RadialMenuView: NSView {
     }
 
     private func updateLabel(selection: Int?, dt: CGFloat) {
-        if let selection, selection != labelIndex {
-            labelIndex = selection
-            let title = itemLayers[selection].title
+        let title = selection.flatMap { itemLayers[$0]?.title } ?? caption
+        // Without a title the old one stays while it fades out.
+        if let title, title != labelTitle {
+            labelTitle = title
             label.string = title
             let textSize = (title as NSString).size(withAttributes: [.font: Self.labelFont])
             let size = CGSize(width: ceil(textSize.width) + 20, height: ceil(textSize.height) + 8)
@@ -321,7 +351,7 @@ final class RadialMenuView: NSView {
             labelBackground.cornerRadius = size.height / 2
             label.frame = CGRect(x: 0, y: (size.height - ceil(textSize.height)) / 2, width: size.width, height: ceil(textSize.height))
         }
-        approach(&labelOpacity, selection == nil ? 0 : 1, rate: 24, dt: dt)
+        approach(&labelOpacity, title == nil ? 0 : 1, rate: 24, dt: dt)
         labelBackground.opacity = Float(labelOpacity)
         // In the hole of the ring, under the direction indicator, where it can't
         // cover a neighbouring icon.

@@ -10,6 +10,8 @@ struct MenuItem {
         /// A running process without a bundle, e.g. started with `cargo run`.
         /// Can only be switched to, not launched.
         case process(name: String)
+        /// A running app that isn't in the config, from the ring of recent apps.
+        case running(NSRunningApplication)
     }
 
     var title: String
@@ -27,7 +29,20 @@ struct MenuItem {
                 $0.activationPolicy != .prohibited
                     && ($0.localizedName == name || $0.executableURL?.lastPathComponent == name)
             }
+        case .running(let app):
+            return apps.first { $0 == app }
         }
+    }
+}
+
+extension MenuItem {
+    /// For a running app that isn't in the config.
+    init(running app: NSRunningApplication) {
+        self.init(
+            title: app.localizedName ?? app.executableURL?.lastPathComponent ?? "?",
+            target: .running(app),
+            icon: app.icon ?? NSWorkspace.shared.icon(for: .unixExecutable)
+        )
     }
 }
 

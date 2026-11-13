@@ -17,6 +17,15 @@ struct AppHistory<App: Equatable> {
     func previous(before frontmost: App?) -> App? {
         apps.first { $0 != frontmost }
     }
+
+    /// Every app in `running` but `frontmost`, most recently in front first.
+    /// Those that haven't been in front since this started follow, in the order
+    /// they're in `running`.
+    func recent(before frontmost: App?, running: [App]) -> [App] {
+        let tracked = apps.filter { running.contains($0) }
+        let untracked = running.filter { !apps.contains($0) }
+        return (tracked + untracked).filter { $0 != frontmost }
+    }
 }
 
 /// Follows which app was in front before the current one, for switching back
@@ -66,5 +75,50 @@ final class RecentApps {
     /// forgotten.
     var previous: NSRunningApplication? {
         history.previous(before: NSWorkspace.shared.frontmostApplication)
+    }
+
+    /// The running apps other than the one in front, most recently in front
+    /// first, like ⌘Tab.
+    var recent: [NSRunningApplication] {
+        let running = NSWorkspace.shared.runningApplications.filter { $0.activationPolicy == .regular }
+        return history.recent(before: NSWorkspace.shared.frontmostApplication, running: running)
+    }
+}
+
+/// Gives each recent app a place on the ring that it keeps until it quits, so
+/// they don't move around as others come and go.
+///
+/// The ring has a fixed number of places, so an app coming or going doesn't
+/// change the angle of the others. One that quits leaves a gap for the next.
+struct RecentSlots<App: Equatable> {
+    /// The app in each place around the ring, `nil` where there's none.
+    private(set) var slots: [App?] = []
+
+    /// The ring has at least this many places, and grows by `growth` at a time.
+    static var minimumCount: Int { 8 }
+    static var growth: Int { 4 }
+
+    /// Places `apps`, most recent first. Those already on the ring stay where
+    /// they are, the rest fill the free places in order, and the ones no longer
+    /// in `apps` make room. Returns the app in each place.
+    mutating func place(_ apps: [App]) -> [App?] {
+        slots = slots.map { slot in slot.flatMap { apps.contains($0) ? $0 : nil } }
+        for app in apps where !slots.contains(where: { $0 == app }) {
+            if let free = slots.firstIndex(where: { $0 == nil }) {
+                slots[free] = app
+            } else {
+                slots.append(app)
+            }
+        }
+
+        let used = (slots.lastIndex { $0 != nil } ?? -1) + 1
+        let steps = (used + Self.growth - 1) / Self.growth
+        let count = max(Self.minimumCount, steps * Self.growth)
+        if slots.count > count {
+            slots.removeLast(slots.count - count)
+        } else {
+            slots += [App?](repeating: nil, count: count - slots.count)
+        }
+        return slots
     }
 }
