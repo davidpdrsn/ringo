@@ -10,8 +10,11 @@ import QuartzCore
 /// - Left click picks the app the cursor points at, or cancels from the center.
 /// - Right click or Escape cancels.
 /// - Tab swaps the configured apps for the other running ones, most recent
-///   first, and back. The configured ring always opens first, so its apps keep
-///   their places.
+///   first, and back. The configured ring opens first, so its apps keep their
+///   places.
+/// - A double press of the hotkey, mouse button or fingers (`double_press_ms`)
+///   swaps in the other running apps too. After a quick press that doesn't pick
+///   an app, the ring stays up for a moment in case a second one comes.
 /// - With a modifier-only hotkey, typing a key or pressing another modifier
 ///   while holding it cancels, since that's someone typing ⌥E or using a
 ///   shortcut rather than reaching for the menu.
@@ -19,9 +22,6 @@ import QuartzCore
 /// - Resting fingers on the trackpad (`trackpad_fingers`) works the same way:
 ///   moving them picks a direction, lifting them switches, and adding a finger
 ///   cancels.
-/// - With `switch_back_tap_ms`, a quick tap of the hotkey, mouse button or
-///   fingers that doesn't point at an app switches back to the app in front
-///   before. The inner ring changes color while letting go would do that.
 @MainActor
 final class RadialMenuController: NSObject {
     private enum Phase {
@@ -34,15 +34,25 @@ final class RadialMenuController: NSObject {
         case trackpad(openedAt: CFTimeInterval)
         /// Opened by holding an extra mouse button; releasing it decides.
         case mouseButton(openedAt: CFTimeInterval)
+        /// Still up after a quick press of `trigger` that didn't pick an app, in
+        /// case it's pressed again for a double press.
+        case waiting(after: Trigger, releasedAt: CFTimeInterval)
 
-        /// When the hotkey, mouse button or fingers went down, for telling a tap
-        /// from a hold.
-        var pressedAt: CFTimeInterval? {
+        /// What's held to keep the menu open, and when it went down.
+        var press: (trigger: Trigger, at: CFTimeInterval)? {
             switch self {
-            case .holding(let openedAt), .trackpad(let openedAt), .mouseButton(let openedAt): openedAt
-            case .closed, .sticky: nil
+            case .holding(let openedAt): (.hotkey, openedAt)
+            case .trackpad(let openedAt): (.trackpad, openedAt)
+            case .mouseButton(let openedAt): (.mouseButton, openedAt)
+            case .closed, .sticky, .waiting: nil
             }
         }
+    }
+
+    private enum Trigger {
+        case hotkey
+        case trackpad
+        case mouseButton
     }
 
     private enum Ring {
@@ -72,7 +82,7 @@ final class RadialMenuController: NSObject {
     private var hotkey: Hotkey?
     private var iconSize: CGFloat = 0
     private var moveCursorToWindow = true
-    private var switchBackTapDuration: CFTimeInterval?
+    private var doublePressDuration: CFTimeInterval?
     private let cursorMover = CursorMover()
     private let cursorHider = CursorHider()
     private let recentApps = RecentApps()
@@ -110,7 +120,7 @@ final class RadialMenuController: NSObject {
         hotkey = config.hotkey
         iconSize = config.iconSize
         moveCursorToWindow = config.moveCursorToWindow
-        switchBackTapDuration = config.switchBackTapDuration
+        doublePressDuration = config.doublePressDuration
         layout = RadialLayout(count: items.count, radius: config.radius, iconSize: config.iconSize)
         appLayout = layout
         menuView.configure(items: items, layout: layout, config: config)
@@ -118,8 +128,8 @@ final class RadialMenuController: NSObject {
 
     func handle(_ event: HotKeyCenter.Event) {
         switch (event, phase) {
-        case (.pressed, .closed):
-            open(.holding(openedAt: CACurrentMediaTime()))
+        case (.pressed, .closed), (.pressed, .waiting):
+            pressed(.holding(openedAt: CACurrentMediaTime()))
         case (.pressed, .sticky):
             close()
         case (.released, .holding):
@@ -133,8 +143,8 @@ final class RadialMenuController: NSObject {
 
     func handleMouseButton(_ event: HotKeyCenter.Event) {
         switch (event, phase) {
-        case (.pressed, .closed):
-            open(.mouseButton(openedAt: CACurrentMediaTime()))
+        case (.pressed, .closed), (.pressed, .waiting):
+            pressed(.mouseButton(openedAt: CACurrentMediaTime()))
         case (.released, .mouseButton):
             released()
         default:
@@ -145,9 +155,9 @@ final class RadialMenuController: NSObject {
 
     func handle(_ event: TrackpadGesture.Event) {
         switch (event, phase) {
-        case (.began, .closed):
+        case (.began, .closed), (.began, .waiting):
             trackpadOffset = .zero
-            open(.trackpad(openedAt: CACurrentMediaTime()))
+            pressed(.trackpad(openedAt: CACurrentMediaTime()))
         case (.moved(let offset), .trackpad):
             trackpadOffset = offset
         case (.ended, .trackpad):
@@ -168,6 +178,21 @@ final class RadialMenuController: NSObject {
 
     // MARK: - Opening and closing
 
+    /// Opens the menu as `phase`. While the ring is still up after a tap of the
+    /// same trigger, that's a double press, which keeps it up and swaps in the
+    /// recent apps.
+    private func pressed(_ phase: Phase) {
+        if case .waiting(let trigger, _) = self.phase {
+            if trigger == phase.press?.trigger {
+                self.phase = phase
+                swapRing()
+                return
+            }
+            close()
+        }
+        open(phase)
+    }
+
     private func open(_ phase: Phase) {
         guard !appItems.isEmpty, let config else {
             NSSound.beep()
@@ -175,9 +200,7 @@ final class RadialMenuController: NSObject {
         }
 
         if ring != .apps {
-            ring = .apps
-            items = appItems
-            layout = appLayout
+            setRing(.apps)
             menuView.configure(items: items, layout: layout, config: config)
         }
         switchedRings = false
@@ -208,8 +231,7 @@ final class RadialMenuController: NSObject {
         NSCursor.arrow.set()
 
         self.phase = phase
-        let now = CACurrentMediaTime()
-        menuView.present(at: toView(center), badges: badges(for: items), time: now, switchingBack: isSwitchBackTap(at: now))
+        menuView.present(at: toView(center), badges: badges(for: items), caption: caption, time: CACurrentMediaTime())
 
         let link = menuView.displayLink(target: self, selector: #selector(tick(_:)))
         link.add(to: .main, forMode: .common)
@@ -268,23 +290,11 @@ final class RadialMenuController: NSObject {
     /// Swaps the configured apps for the recent ones, or back.
     private func swapRing() {
         guard isOpen, let config else { return }
-        switch ring {
-        case .apps:
-            // Those already in the configured ring are a flick away there.
-            let recent = recentApps.recent.filter { app in
-                !appItems.contains { $0.runningApplication(in: [app]) != nil }
-            }
-            guard !recent.isEmpty else {
-                NSSound.beep()
-                return
-            }
-            ring = .recent
-            items = recentSlots.place(recent).map { $0.map(MenuItem.init(running:)) }
-            layout = RadialLayout(count: items.count, radius: config.radius, iconSize: config.iconSize)
-        case .recent:
-            ring = .apps
-            items = appItems
-            layout = appLayout
+        // The ring is about to close, with nothing held to pick from it.
+        if case .waiting = phase { return }
+        guard setRing(ring == .apps ? .recent : .apps) else {
+            NSSound.beep()
+            return
         }
         switchedRings = true
         menuView.show(
@@ -292,15 +302,35 @@ final class RadialMenuController: NSObject {
             layout: layout,
             config: config,
             badges: badges(for: items),
-            caption: ring == .recent ? "Recent" : nil,
+            caption: caption,
             time: CACurrentMediaTime()
         )
     }
 
-    /// The configured item for `app`, for its settings and so an app with no
-    /// windows opens one, or else one that just switches to it.
-    private func menuItem(for app: NSRunningApplication) -> MenuItem {
-        appItems.first { $0.runningApplication(in: [app]) != nil } ?? MenuItem(running: app)
+    /// Sets the items and layout to those of `ring`, without updating the view.
+    /// Returns false when there are no recent apps to show.
+    @discardableResult
+    private func setRing(_ ring: Ring) -> Bool {
+        guard let config else { return false }
+        switch ring {
+        case .apps:
+            items = appItems
+            layout = appLayout
+        case .recent:
+            // Those already in the configured ring are a flick away there.
+            let recent = recentApps.recent.filter { app in
+                !appItems.contains { $0.runningApplication(in: [app]) != nil }
+            }
+            guard !recent.isEmpty else { return false }
+            items = recentSlots.place(recent).map { $0.map(MenuItem.init(running:)) }
+            layout = RadialLayout(count: items.count, radius: config.radius, iconSize: config.iconSize)
+        }
+        self.ring = ring
+        return true
+    }
+
+    private var caption: String? {
+        ring == .recent ? "Recent" : nil
     }
 
     private func close(activating item: MenuItem? = nil) {
@@ -334,15 +364,6 @@ final class RadialMenuController: NSObject {
         }
         pendingHide = work
         DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: work)
-    }
-
-    /// Switches back to the app in front before the current one, like a quick ⌘Tab.
-    private func switchBack() {
-        guard let app = recentApps.previous else {
-            NSSound.beep()
-            return
-        }
-        activate(menuItem(for: app))
     }
 
     private func activate(_ item: MenuItem) {
@@ -396,6 +417,13 @@ final class RadialMenuController: NSObject {
     @objc private func tick(_ link: CADisplayLink) {
         guard isOpen else { return }
 
+        if case .waiting(_, let releasedAt) = phase,
+           CACurrentMediaTime() - releasedAt >= doublePressDuration ?? 0 {
+            // Too late for a second press.
+            close()
+            return
+        }
+
         if case .holding(let openedAt) = phase, let hotkey {
             if wasUsedForTyping(since: openedAt) {
                 close()
@@ -409,13 +437,7 @@ final class RadialMenuController: NSObject {
         }
 
         let offset = pointerOffset()
-        let selection = selection(for: offset)
-        menuView.update(
-            time: link.targetTimestamp,
-            selection: selection,
-            pointer: offset,
-            switchingBack: selection == nil && isSwitchBackTap(at: link.targetTimestamp)
-        )
+        menuView.update(time: link.targetTimestamp, selection: selection(for: offset), pointer: offset)
     }
 
     private func triggerReleased() {
@@ -427,23 +449,18 @@ final class RadialMenuController: NSObject {
         }
     }
 
-    /// Switches to the app the pointer points at. Otherwise cancels, or after a
-    /// quick tap switches back to the previous app.
+    /// Switches to the app the pointer points at, or cancels. A quick press of
+    /// the configured ring that would cancel leaves it up for a moment instead,
+    /// in case it's the first of a double press.
     private func released() {
+        let now = CACurrentMediaTime()
         let selection = selection(for: pointerOffset())
-        if selection == nil && isSwitchBackTap(at: CACurrentMediaTime()) {
-            close()
-            switchBack()
+        if selection == nil, ring == .apps, !switchedRings, let doublePressDuration,
+           let press = phase.press, now - press.at < doublePressDuration {
+            phase = .waiting(after: press.trigger, releasedAt: now)
         } else {
             close(activating: selection.flatMap { items[$0] })
         }
-    }
-
-    /// Whether the press is still short enough that letting go without pointing
-    /// at an app switches back.
-    private func isSwitchBackTap(at time: CFTimeInterval) -> Bool {
-        guard let switchBackTapDuration, let pressedAt = phase.pressedAt, !switchedRings else { return false }
-        return time - pressedAt < switchBackTapDuration
     }
 
     /// Whether a modifier-only hotkey has been combined with other keys since

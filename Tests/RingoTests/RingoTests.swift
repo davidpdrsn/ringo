@@ -720,35 +720,23 @@ import Testing
     }
 }
 
-@Suite struct SwitchBackTests {
-    @Test func picksTheAppInFrontBeforeTheCurrentOne() {
+@Suite struct RecentAppsTests {
+    @Test func movesTheAppInFrontToTheStart() {
         var history = AppHistory<Int>()
         history.activated(1)
         history.activated(2)
-        #expect(history.previous(before: 2) == 1)
+        #expect(history.apps == [2, 1])
         history.activated(1)
-        #expect(history.previous(before: 1) == 2)
         #expect(history.apps == [1, 2])
     }
 
-    @Test func skipsAppsThatQuit() {
+    @Test func forgetsAppsThatQuit() {
         var history = AppHistory<Int>()
         history.activated(1)
         history.activated(2)
         history.activated(3)
         history.terminated(2)
-        #expect(history.previous(before: 3) == 1)
-        history.terminated(1)
-        #expect(history.previous(before: 3) == nil)
-    }
-
-    @Test func goesBackToTheLastAppWhenSomethingUntrackedIsInFront() {
-        // Like Raycast's window, which isn't recorded.
-        var history = AppHistory<Int>()
-        history.activated(1)
-        history.activated(2)
-        #expect(history.previous(before: 99) == 2)
-        #expect(history.previous(before: nil) == 2)
+        #expect(history.apps == [3, 1])
     }
 
     @Test func listsRecentAppsWithoutTheFrontmost() {
@@ -789,33 +777,16 @@ import Testing
         var history = AppHistory<NSRunningApplication>()
         history.activated(.current)
         history.activated(finder)
-        #expect(history.previous(before: finder) == .current)
-        history.activated(.current)
-        #expect(history.previous(before: .current) == finder)
-        #expect(history.previous(before: NSRunningApplication(processIdentifier: finder.processIdentifier)) == .current)
+        let lookedUpAgain = NSRunningApplication(processIdentifier: finder.processIdentifier)
+        #expect(history.recent(before: lookedUpAgain, running: [finder, .current]) == [.current])
     }
 
-    @Test func parsesTheTapDuration() throws {
-        #expect(try Config.parse("").switchBackTapDuration == nil)
-        #expect(try Config.parse("switch_back_tap_ms = 0").switchBackTapDuration == nil)
-        #expect(try Config.parse("switch_back_tap_ms = 250").switchBackTapDuration == 0.25)
-        #expect(throws: ConfigError.self) { try Config.parse("switch_back_tap_ms = -1") }
-        #expect(throws: ConfigError.self) { try Config.parse("switch_back_tap_ms = 5000") }
-    }
-
-    @Test func parsesTheInnerRingsSwitchBackColor() throws {
-        #expect(try Config.parse("").innerRing.switchBackColor == nil)
-        let config = try Config.parse("[inner_ring]\nswitch_back_color = \"#FF0000\"")
-        #expect(config.innerRing.switchBackColor == RGBAColor(red: 1, green: 0, blue: 0, alpha: 1))
-        #expect(throws: ConfigError.self) { try Config.parse("[inner_ring]\nswitch_back_color = \"red\"") }
-    }
-
-    @Test func styleEditorWritesTheSwitchBackColor() throws {
-        let text = "[inner_ring]\ncolor = \"#FFFFFF\"\n"
-        var config = try Config.parse(text)
-        config.innerRing.switchBackColor = RGBAColor(red: 1, green: 0, blue: 0, alpha: 1)
-        let applied = try Config.applyingStyle(of: config, to: text)
-        #expect(applied == "[inner_ring]\ncolor = \"#FFFFFF\"\nswitch_back_color = \"#FF0000\"\n")
+    @Test func parsesTheDoublePressDuration() throws {
+        #expect(try Config.parse("").doublePressDuration == 0.25)
+        #expect(try Config.parse("double_press_ms = 0").doublePressDuration == nil)
+        #expect(try Config.parse("double_press_ms = 400").doublePressDuration == 0.4)
+        #expect(throws: ConfigError.self) { try Config.parse("double_press_ms = -1") }
+        #expect(throws: ConfigError.self) { try Config.parse("double_press_ms = 5000") }
     }
 }
 

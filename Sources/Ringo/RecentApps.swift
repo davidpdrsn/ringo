@@ -13,11 +13,6 @@ struct AppHistory<App: Equatable> {
         apps.removeAll { $0 == app }
     }
 
-    /// The app most recently in front other than `frontmost`.
-    func previous(before frontmost: App?) -> App? {
-        apps.first { $0 != frontmost }
-    }
-
     /// Every app in `running` but `frontmost`, most recently in front first.
     /// Those that haven't been in front since this started follow, in the order
     /// they're in `running`.
@@ -28,11 +23,10 @@ struct AppHistory<App: Equatable> {
     }
 }
 
-/// Follows which app was in front before the current one, for switching back
-/// to it like a quick ⌘Tab.
+/// Follows the order apps were in front in, for the ring of recent apps.
 ///
-/// Watches every switch, not just those made through the menu, since the app
-/// before might have come to the front from the Dock or ⌘Tab.
+/// Watches every switch, not just those made through the menu, since an app
+/// might have come to the front from the Dock or ⌘Tab.
 ///
 /// Apps are told apart by `NSRunningApplication`'s equality rather than their
 /// pids, since a process that isn't an app bundle, like one started with
@@ -69,12 +63,6 @@ final class RecentApps {
             MainActor.assumeIsolated { self?.history.terminated(app) }
         }
         observers = [activated, terminated]
-    }
-
-    /// The app that was in front before the current one. Apps that quit are
-    /// forgotten.
-    var previous: NSRunningApplication? {
-        history.previous(before: NSWorkspace.shared.frontmostApplication)
     }
 
     /// The running apps other than the one in front, most recently in front

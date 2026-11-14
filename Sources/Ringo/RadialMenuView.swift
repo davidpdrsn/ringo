@@ -42,8 +42,6 @@ final class RadialMenuView: NSView {
     private var labelTitle: String?
     /// Shown in the label while nothing is selected.
     private var caption: String?
-    /// How far the inner ring has gone to its switch-back color, from 0 to 1.
-    private var switchBackAmount: CGFloat = 0
 
     private let backdrop = BlurView()
     private let overlay = NSView()
@@ -51,9 +49,6 @@ final class RadialMenuView: NSView {
     private let backdropTint = CAShapeLayer()
     private let outerHighlight = RingHighlightLayers()
     private let centerRing = CAShapeLayer()
-    /// The inner ring in its switch-back color, faded in over it while letting
-    /// go would switch back to the previous app.
-    private let switchBackRing = CAShapeLayer()
     private let innerHighlight = RingHighlightLayers()
     private let labelBackground = CALayer()
     private let label = CATextLayer()
@@ -83,11 +78,9 @@ final class RadialMenuView: NSView {
             ellipseIn: CGRect(x: -Self.centerRingRadius, y: -Self.centerRingRadius, width: Self.centerRingRadius * 2, height: Self.centerRingRadius * 2),
             transform: nil
         )
-        for ring in [centerRing, switchBackRing] {
-            ring.path = ringPath
-            ring.fillColor = nil
-            ring.lineWidth = Self.centerRingLineWidth
-        }
+        centerRing.path = ringPath
+        centerRing.fillColor = nil
+        centerRing.lineWidth = Self.centerRingLineWidth
 
         backdropTint.fillRule = .evenOdd
 
@@ -100,7 +93,7 @@ final class RadialMenuView: NSView {
         label.alignmentMode = .center
         labelBackground.addSublayer(label)
 
-        for layer in [backdropTint, outerHighlight.layer, centerRing, switchBackRing, innerHighlight.layer, labelBackground] {
+        for layer in [backdropTint, outerHighlight.layer, centerRing, innerHighlight.layer, labelBackground] {
             layer.opacity = 0
             overlay.layer?.addSublayer(layer)
         }
@@ -198,13 +191,13 @@ final class RadialMenuView: NSView {
         backdropTint.fillColor = config.outerRing.color?.cgColor
         backdropTint.isHidden = config.outerRing.color == nil
         centerRing.strokeColor = config.innerRing.color?.cgColor ?? NSColor.white.withAlphaComponent(0.55).cgColor
-        switchBackRing.strokeColor = (config.innerRing.switchBackColor ?? InnerRing.defaultSwitchBackColor).cgColor
         CATransaction.commit()
     }
 
     /// Resets the open animation, centered on `center` (in view coordinates).
-    /// `badges` has each item's Dock badge, if it has one.
-    func present(at center: CGPoint, badges: [String?], time: CFTimeInterval, switchingBack: Bool = false) {
+    /// `badges` has each item's Dock badge, if it has one, and `caption` is shown
+    /// under the center while nothing is selected.
+    func present(at center: CGPoint, badges: [String?], caption: String? = nil, time: CFTimeInterval) {
         self.center = center
         openedAt = time
         iconsShownAt = time
@@ -212,8 +205,7 @@ final class RadialMenuView: NSView {
         pointerOpacity = 0
         labelOpacity = 0
         labelTitle = nil
-        caption = nil
-        switchBackAmount = switchingBack ? 1 : 0
+        self.caption = caption
 
         CATransaction.begin()
         // Including the new icon images, which would otherwise cross-fade in.
@@ -224,7 +216,7 @@ final class RadialMenuView: NSView {
             for case let item? in itemLayers {
                 item.rasterize(largestSize: iconSize * max(1, selectedIconScale), scale: scale)
             }
-            for layer in [backdropTint, centerRing, switchBackRing, labelBackground, label] {
+            for layer in [backdropTint, centerRing, labelBackground, label] {
                 layer.contentsScale = scale
             }
             outerHighlight.setContentsScale(scale)
@@ -236,13 +228,12 @@ final class RadialMenuView: NSView {
             item.setBadge(badge, iconSize: iconSize)
         }
         centerRing.position = center
-        switchBackRing.position = center
         outerHighlight.layer.position = center
         innerHighlight.layer.position = center
         backdropTint.position = center
         CATransaction.commit()
 
-        update(time: time, selection: nil, pointer: .zero, switchingBack: switchingBack)
+        update(time: time, selection: nil, pointer: .zero)
     }
 
     /// Swaps the icons for `items` while the menu is open, and fans them out
@@ -276,9 +267,7 @@ final class RadialMenuView: NSView {
 
     // MARK: - Animation
 
-    /// `switchingBack` is whether letting go now would switch back to the
-    /// previous app.
-    func update(time: CFTimeInterval, selection: Int?, pointer offset: CGPoint, switchingBack: Bool = false) {
+    func update(time: CFTimeInterval, selection: Int?, pointer offset: CGPoint) {
         let dt = lastFrameTime.map { min(time - $0, 0.1) } ?? 0
         lastFrameTime = time
         let elapsed = time - openedAt
@@ -300,12 +289,8 @@ final class RadialMenuView: NSView {
         backdropTint.opacity = Float(appear)
         backdropTint.transform = CATransform3DMakeScale(backdropScale, backdropScale, 1)
 
-        approach(&switchBackAmount, switchingBack ? 1 : 0, rate: 30, dt: dt)
-        centerRing.opacity = Float(appear * (1 - switchBackAmount))
-        switchBackRing.opacity = Float(appear * switchBackAmount)
-        for ring in [centerRing, switchBackRing] {
-            ring.transform = CATransform3DMakeScale(appear, appear, 1)
-        }
+        centerRing.opacity = Float(appear)
+        centerRing.transform = CATransform3DMakeScale(appear, appear, 1)
 
         for case let (index, item?) in itemLayers.enumerated() {
             let t = progress(iconsElapsed - Double(index) * openDuration * Self.staggerRatio, duration: openDuration)

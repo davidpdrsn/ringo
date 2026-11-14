@@ -24,10 +24,10 @@ struct Config: Equatable {
     var moveCursorToWindow: Bool
     /// An extra mouse button that opens the menu while held, counting from 1.
     var mouseButton: Int?
-    /// A press of the hotkey or mouse button shorter than this, in seconds, that
-    /// doesn't point at an app switches back to the app in front before. `nil`
-    /// is off.
-    var switchBackTapDuration: Double?
+    /// Pressing the hotkey, mouse button or fingers again within this many
+    /// seconds of a quick press that didn't pick an app opens the menu on the
+    /// other running apps. `nil` is off.
+    var doublePressDuration: Double?
     var showMenuBarIcon: Bool
     var apps: [AppSpec]
 
@@ -38,6 +38,7 @@ struct Config: Equatable {
     static let defaultUnselectedIconOpacity = 0.55
     static let defaultUnselectedIconScale = 1.0
     static let defaultOpenAnimationMs = 180.0
+    static let defaultDoublePressMs = 250.0
     /// By default the outer ring reaches this fraction of the icon size to either
     /// side of `radius`. Less than a half, so the icons stick out past its edges.
     static let defaultOuterRingHalfWidthRatio = 0.3
@@ -64,13 +65,7 @@ struct OuterRing: Equatable {
 struct InnerRing: Equatable {
     /// `nil` is a translucent white.
     var color: RGBAColor?
-    /// Its color while letting go would switch back to the previous app. `nil`
-    /// is `defaultSwitchBackColor`.
-    var switchBackColor: RGBAColor?
     var highlight: RingHighlight
-
-    /// Amber orange.
-    static let defaultSwitchBackColor = RGBAColor(red: 1, green: 160.0 / 255, blue: 0, alpha: 1)
 }
 
 /// The lit part of a ring in the direction of the cursor.
@@ -225,7 +220,6 @@ extension Config {
         )
         let innerRing = InnerRing(
             color: try parseColor(raw.innerRing?.color, key: "inner_ring.color"),
-            switchBackColor: try parseColor(raw.innerRing?.switchBackColor, key: "inner_ring.switch_back_color"),
             highlight: try RingHighlight(raw.innerRing?.highlight, defaults: .innerDefault, table: "inner_ring.highlight")
         )
 
@@ -244,7 +238,7 @@ extension Config {
             throw .invalid("trackpad_fingers must be 3, 4 or 5")
         }
 
-        let switchBackTapMs = try checked(raw.switchBackTapMs, in: 0...1000, key: "switch_back_tap_ms") ?? 0
+        let doublePressMs = try checked(raw.doublePressMs, in: 0...1000, key: "double_press_ms") ?? defaultDoublePressMs
 
         return Config(
             hotkey: hotkey,
@@ -259,7 +253,7 @@ extension Config {
             trackpadFingers: raw.trackpadFingers,
             moveCursorToWindow: raw.moveCursorToWindow ?? true,
             mouseButton: raw.mouseButton,
-            switchBackTapDuration: switchBackTapMs > 0 ? switchBackTapMs / 1000 : nil,
+            doublePressDuration: doublePressMs > 0 ? doublePressMs / 1000 : nil,
             showMenuBarIcon: raw.showMenuBarIcon ?? true,
             apps: apps
         )
@@ -352,12 +346,11 @@ extension Config {
         # stops doing anything else. Needs the Accessibility permission.
         # mouse_button = 5
 
-        # Tap the hotkey (or click the mouse button, or tap the trackpad fingers) to
-        # switch back to the app you were in before, like a quick ⌘Tab. A press
-        # shorter than this many milliseconds that doesn't point at an app counts
-        # as a tap; hold it longer and the menu works as usual. Off by default. The
-        # inner ring takes inner_ring.switch_back_color until the time is up.
-        # switch_back_tap_ms = 200
+        # Double press the hotkey (or the mouse button, or tap the trackpad fingers
+        # twice) to open the menu on the other running apps, like Tab does. Both
+        # presses have to be shorter than this many milliseconds, and so does the
+        # gap between them. 0 turns it off.
+        # double_press_ms = 250
 
         # Move the cursor to the middle of the app's window after switching to it.
         move_cursor_to_window = true
@@ -426,11 +419,8 @@ extension Config {
         # glow_opacity = 0.3
 
         # The small circle in the middle. A translucent white by default.
-        # switch_back_color is its color while letting go would switch back to the
-        # previous app (see switch_back_tap_ms), an amber orange by default.
         [inner_ring]
         # color = "#FFFFFF8C"
-        # switch_back_color = "#FFA000"
 
         # Its highlight takes the same settings as the outer ring's, and by default
         # is a bubble in the system accent color.
@@ -485,7 +475,7 @@ private struct RawConfig: Decodable {
     var trackpadFingers: Int?
     var moveCursorToWindow: Bool?
     var mouseButton: Int?
-    var switchBackTapMs: Double?
+    var doublePressMs: Double?
     var showMenuBarIcon: Bool?
     var icons: RawIcons?
     var outerRing: RawOuterRing?
@@ -498,7 +488,7 @@ private struct RawConfig: Decodable {
         case trackpadFingers = "trackpad_fingers"
         case moveCursorToWindow = "move_cursor_to_window"
         case mouseButton = "mouse_button"
-        case switchBackTapMs = "switch_back_tap_ms"
+        case doublePressMs = "double_press_ms"
         case showMenuBarIcon = "show_menu_bar_icon"
         case icons
         case outerRing = "outer_ring"
@@ -520,7 +510,7 @@ private struct RawConfig: Decodable {
         trackpadFingers = try container.decodeIfPresent(Int.self, forKey: .trackpadFingers)
         moveCursorToWindow = try container.decodeIfPresent(Bool.self, forKey: .moveCursorToWindow)
         mouseButton = try container.decodeIfPresent(Int.self, forKey: .mouseButton)
-        switchBackTapMs = try container.decodeNumberIfPresent(forKey: .switchBackTapMs)
+        doublePressMs = try container.decodeNumberIfPresent(forKey: .doublePressMs)
         showMenuBarIcon = try container.decodeIfPresent(Bool.self, forKey: .showMenuBarIcon)
         icons = try container.decodeIfPresent(RawIcons.self, forKey: .icons)
         outerRing = try container.decodeIfPresent(RawOuterRing.self, forKey: .outerRing)
@@ -586,12 +576,10 @@ private struct RawOuterRing: Decodable {
 
 private struct RawInnerRing: Decodable {
     var color: String?
-    var switchBackColor: String?
     var highlight: RawRingHighlight?
 
     enum CodingKeys: String, CodingKey, CaseIterable {
         case color
-        case switchBackColor = "switch_back_color"
         case highlight
     }
 
@@ -599,7 +587,6 @@ private struct RawInnerRing: Decodable {
         try rejectUnknownKeys(in: decoder, allowed: CodingKeys.self)
         let container = try decoder.container(keyedBy: CodingKeys.self)
         color = try container.decodeIfPresent(String.self, forKey: .color)
-        switchBackColor = try container.decodeIfPresent(String.self, forKey: .switchBackColor)
         highlight = try container.decodeIfPresent(RawRingHighlight.self, forKey: .highlight)
     }
 }
