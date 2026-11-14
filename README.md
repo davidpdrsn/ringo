@@ -23,7 +23,7 @@ one and let go to switch to it.
 - **Double press** the hotkey (or the mouse button, or tap the trackpad fingers
   twice) and hold the second press to swap in the other running apps, like Tab.
 
-Picking an app that isn't running launches it. Apps show the same badge they
+Apps that aren't running are dimmed, and picking one launches it. Apps show the same badge they
 have in the Dock, like an unread count.
 
 ## Building

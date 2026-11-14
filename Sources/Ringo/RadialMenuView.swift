@@ -55,6 +55,8 @@ final class RadialMenuView: NSView {
 
     /// Each icon starts this fraction of `openDuration` after the one before it.
     private static let staggerRatio = 1.0 / 15
+    /// How opaque an app that isn't running is, unless it's selected.
+    private static let notRunningIconOpacity: CGFloat = 0.4
     private static let centerRingRadius: CGFloat = 13
     private static let centerRingLineWidth: CGFloat = 2.5
     private static let labelFont = NSFont.systemFont(ofSize: 13, weight: .semibold)
@@ -195,9 +197,10 @@ final class RadialMenuView: NSView {
     }
 
     /// Resets the open animation, centered on `center` (in view coordinates).
-    /// `badges` has each item's Dock badge, if it has one, and `caption` is shown
-    /// under the center while nothing is selected.
-    func present(at center: CGPoint, badges: [String?], caption: String? = nil, time: CFTimeInterval) {
+    /// `badges` has each item's Dock badge, if it has one, `running` whether
+    /// it's running, and `caption` is shown under the center while nothing is
+    /// selected.
+    func present(at center: CGPoint, badges: [String?], running: [Bool], caption: String? = nil, time: CFTimeInterval) {
         self.center = center
         openedAt = time
         iconsShownAt = time
@@ -222,9 +225,10 @@ final class RadialMenuView: NSView {
             outerHighlight.setContentsScale(scale)
             innerHighlight.setContentsScale(scale)
         }
-        for case let (item?, badge) in zip(itemLayers, badges) {
+        for case let ((item?, badge), isRunning) in zip(zip(itemLayers, badges), running) {
             item.highlight = 0
             item.recede = 0
+            item.isRunning = isRunning
             item.setBadge(badge, iconSize: iconSize)
         }
         centerRing.position = center
@@ -239,7 +243,15 @@ final class RadialMenuView: NSView {
     /// Swaps the icons for `items` while the menu is open, and fans them out
     /// again without reopening the rings. `caption` is shown under the center
     /// while nothing is selected.
-    func show(items: [MenuItem?], layout: RadialLayout, config: Config, badges: [String?], caption: String?, time: CFTimeInterval) {
+    func show(
+        items: [MenuItem?],
+        layout: RadialLayout,
+        config: Config,
+        badges: [String?],
+        running: [Bool],
+        caption: String?,
+        time: CFTimeInterval
+    ) {
         configure(items: items, layout: layout, config: config)
         iconsShownAt = time
         self.caption = caption
@@ -247,8 +259,9 @@ final class RadialMenuView: NSView {
         CATransaction.begin()
         CATransaction.setDisableActions(true)
         let scale = window?.backingScaleFactor ?? 2
-        for case let (item?, badge) in zip(itemLayers, badges) {
+        for case let ((item?, badge), isRunning) in zip(zip(itemLayers, badges), running) {
             item.rasterize(largestSize: iconSize * max(1, selectedIconScale), scale: scale)
+            item.isRunning = isRunning
             item.setBadge(badge, iconSize: iconSize)
         }
         CATransaction.commit()
@@ -305,7 +318,9 @@ final class RadialMenuView: NSView {
             let receded = 1 + (unselectedIconScale - 1) * item.recede
             let scale = (0.2 + 0.8 * easeOutCubic(t)) * selected * receded
             item.container.transform = CATransform3DMakeScale(scale, scale, 1)
-            item.container.opacity = Float(min(1, t * 2.5) * (1 - (1 - unselectedIconOpacity) * item.recede))
+            // Lit up while selected, so it's clear which one letting go launches.
+            let dimmed = item.isRunning ? 1 : 1 - (1 - Self.notRunningIconOpacity) * (1 - item.highlight)
+            item.container.opacity = Float(min(1, t * 2.5) * (1 - (1 - unselectedIconOpacity) * item.recede) * dimmed)
         }
 
         // Only with an app selected, so they never promise a switch that letting
@@ -474,6 +489,8 @@ private final class ItemLayers {
     var highlight: CGFloat = 0
     /// 0...1, how far it has dimmed and shrunk while another item is selected.
     var recede: CGFloat = 0
+    /// Dimmed when it isn't, since picking it launches it.
+    var isRunning = true
 
     init(item: MenuItem, iconSize: CGFloat) {
         title = item.title

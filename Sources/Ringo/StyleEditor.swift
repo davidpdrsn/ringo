@@ -372,6 +372,7 @@ private final class MenuPreviewView: NSView {
         menuView.present(
             at: CGPoint(x: bounds.midX, y: bounds.midY),
             badges: Array(repeating: nil, count: layout.count),
+            running: Array(repeating: true, count: layout.count),
             time: time
         )
     }

@@ -231,7 +231,14 @@ final class RadialMenuController: NSObject {
         NSCursor.arrow.set()
 
         self.phase = phase
-        menuView.present(at: toView(center), badges: badges(for: items), caption: caption, time: CACurrentMediaTime())
+        let apps = runningApplications(for: items)
+        menuView.present(
+            at: toView(center),
+            badges: badges(for: apps),
+            running: apps.map { $0 != nil },
+            caption: caption,
+            time: CACurrentMediaTime()
+        )
 
         let link = menuView.displayLink(target: self, selector: #selector(tick(_:)))
         link.add(to: .main, forMode: .common)
@@ -266,11 +273,15 @@ final class RadialMenuController: NSObject {
         }
     }
 
-    private func badges(for items: [MenuItem?]) -> [String?] {
+    /// The running app for each item, `nil` when it isn't running or the place
+    /// is empty.
+    private func runningApplications(for items: [MenuItem?]) -> [NSRunningApplication?] {
         let runningApps = NSWorkspace.shared.runningApplications
-        return items.map { item in
-            item?.runningApplication(in: runningApps).flatMap { DockBadge.label(for: $0.processIdentifier) }
-        }
+        return items.map { $0?.runningApplication(in: runningApps) }
+    }
+
+    private func badges(for apps: [NSRunningApplication?]) -> [String?] {
+        apps.map { $0.flatMap { DockBadge.label(for: $0.processIdentifier) } }
     }
 
     // MARK: - Recent apps
@@ -297,11 +308,13 @@ final class RadialMenuController: NSObject {
             return
         }
         switchedRings = true
+        let apps = runningApplications(for: items)
         menuView.show(
             items: items,
             layout: layout,
             config: config,
-            badges: badges(for: items),
+            badges: badges(for: apps),
+            running: apps.map { $0 != nil },
             caption: caption,
             time: CACurrentMediaTime()
         )
