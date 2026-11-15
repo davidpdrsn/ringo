@@ -26,7 +26,7 @@ struct Config: Equatable {
     var mouseButton: Int?
     /// Pressing the hotkey, mouse button or fingers again within this many
     /// seconds of a quick press that didn't pick an app opens the menu on the
-    /// other running apps. `nil` is off.
+    /// recent apps. `nil` is off.
     var doublePressDuration: Double?
     var showMenuBarIcon: Bool
     var apps: [AppSpec]
@@ -347,7 +347,7 @@ extension Config {
         # mouse_button = 5
 
         # Double press the hotkey (or the mouse button, or tap the trackpad fingers
-        # twice) to open the menu on the other running apps, like Tab does. Both
+        # twice) to open the menu on the recent apps, like Tab does. Both
         # presses have to be shorter than this many milliseconds, and so does the
         # gap between them. 0 turns it off.
         # double_press_ms = 250

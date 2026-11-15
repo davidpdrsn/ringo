@@ -14,14 +14,15 @@ one and let go to switch to it.
 - **Release in the middle** cancels. The menu only stays open while the hotkey
   is held.
 - **Click** while holding also switches. Right click or Escape cancels.
-- **Tab** while the menu is open swaps your apps for the other ones running
-  right now, leaving out the app you're in. Tab again goes back. The menu
-  opens on your own apps, so they keep their places. Other apps keep theirs
-  too: each takes the first free place, clockwise from 12 o'clock, and stays
-  there until it quits, leaving a gap for the next one. The ring has room for 8
-  and grows 4 at a time when it fills up.
+- **Tab** while the menu is open swaps your apps for the other ones you've
+  used, leaving out the app you're in. Tab again goes back. The menu opens on
+  your own apps, so they keep their places. Other apps keep theirs too: each
+  takes the first free place, clockwise from 12 o'clock, and stays there. The
+  ring has room for 8 and grows 4 at a time when the running apps fill it up.
+  Apps that have quit fill the places left over, dimmed, and give up their place
+  when a running app needs it.
 - **Double press** the hotkey (or the mouse button, or tap the trackpad fingers
-  twice) and hold the second press to swap in the other running apps, like Tab.
+  twice) and hold the second press to swap in the recent apps, like Tab.
 
 Apps that aren't running are dimmed, and picking one launches it. Apps show the same badge they
 have in the Dock, like an unread count.
@@ -67,7 +68,7 @@ hotkey = "option+space"
 open_animation_ms = 180
 
 # A second press within this many milliseconds of a quick first one opens the
-# menu on the other running apps. 0 turns it off.
+# menu on the recent apps. 0 turns it off.
 double_press_ms = 250
 
 # How far the icons are from the cursor, and their size, in points.
@@ -182,8 +183,8 @@ the permission survives rebuilds; with ad-hoc signing you'd have to grant it
 again after every `just install`.
 
 **Double press**: tapping the hotkey, clicking the mouse button or tapping the
-trackpad fingers, then pressing again and holding, opens the menu on the other
-running apps, as if you'd pressed Tab. Both the first press and the gap after it
+trackpad fingers, then pressing again and holding, opens the menu on the recent
+apps, as if you'd pressed Tab. Both the first press and the gap after it
 have to be shorter than `double_press_ms`, 250 by default, and the first press
 can't point at an app. It has to be the same trigger both times. After a press
 like that the ring stays up until the time for a second one is up, so it
@@ -194,7 +195,10 @@ the same number of fingers, like Look Up, it fires too.
 
 The other apps are ordered by when they were last in front, counting every
 switch, not just those made with Ringo, so an app you went to with ⌘Tab or the
-Dock counts too. Menu bar apps and launchers like Raycast are skipped.
+Dock counts too. Menu bar apps and launchers like Raycast are skipped. Ringo
+remembers apps that quit since it started, and picking one launches it again.
+A process that isn't an app bundle can't be launched, so it's dropped when it
+quits.
 
 **Cursor**: after switching, the cursor moves to the middle of the app's front
 window, once the app is in front. Set `move_cursor_to_window = false` to leave it

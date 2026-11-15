@@ -730,13 +730,23 @@ import Testing
         #expect(history.apps == [1, 2])
     }
 
-    @Test func forgetsAppsThatQuit() {
+    @Test func forgetsApps() {
         var history = AppHistory<Int>()
         history.activated(1)
         history.activated(2)
         history.activated(3)
-        history.terminated(2)
+        history.forget(2)
         #expect(history.apps == [3, 1])
+    }
+
+    @Test func remembersALimitedNumberOfAppsThatQuit() {
+        var history = AppHistory<Int>()
+        for app in 1...5 {
+            history.activated(app)
+        }
+        // 5 and 3 are running, so only 4, 2 and 1 count against the limit.
+        history.forgetQuit(beyond: 2, running: [3, 5])
+        #expect(history.apps == [5, 4, 3, 2])
     }
 
     @Test func listsRecentAppsWithoutTheFrontmost() {
@@ -746,27 +756,59 @@ import Testing
         history.activated(3)
         // 4 and 5 are running but haven't been in front, so they go last in the
         // order they're running in.
-        #expect(history.recent(before: 3, running: [5, 1, 4, 2, 3]) == [2, 1, 5, 4])
-        #expect(history.recent(before: nil, running: [1, 2, 3]) == [3, 2, 1])
+        #expect(history.recent(before: 3, running: [5, 1, 4, 2, 3]).running == [2, 1, 5, 4])
+        #expect(history.recent(before: nil, running: [1, 2, 3]).running == [3, 2, 1])
+    }
+
+    @Test func listsAppsThatQuitApart() {
+        var history = AppHistory<Int>()
+        for app in 1...4 {
+            history.activated(app)
+        }
+        let recent = history.recent(before: 4, running: [1, 3, 4])
+        #expect(recent.running == [3, 1])
+        #expect(recent.quit == [2])
     }
 
     @Test func recentAppsKeepTheirPlaces() {
         var slots = RecentSlots<Int>()
         // Fills in order of recency, padded to the minimum.
-        #expect(slots.place([3, 1, 2]) == [3, 1, 2, nil, nil, nil, nil, nil])
+        #expect(slots.place([3, 1, 2], quit: []) == [3, 1, 2, nil, nil, nil, nil, nil])
         // Switching around doesn't move anyone.
-        #expect(slots.place([2, 3, 1]) == [3, 1, 2, nil, nil, nil, nil, nil])
-        // One that quits leaves a gap, which the next new app takes.
-        #expect(slots.place([2, 3]) == [3, nil, 2, nil, nil, nil, nil, nil])
-        #expect(slots.place([4, 5, 2, 3]) == [3, 4, 2, 5, nil, nil, nil, nil])
+        #expect(slots.place([2, 3, 1], quit: []) == [3, 1, 2, nil, nil, nil, nil, nil])
+        // One that's gone leaves a gap, which the next new app takes.
+        #expect(slots.place([2, 3], quit: []) == [3, nil, 2, nil, nil, nil, nil, nil])
+        #expect(slots.place([4, 5, 2, 3], quit: []) == [3, 4, 2, 5, nil, nil, nil, nil])
     }
 
     @Test func recentAppsGrowTheRingInSteps() {
         var slots = RecentSlots<Int>()
-        #expect(slots.place(Array(1...9)).count == 12)
-        #expect(slots.place(Array(1...12)).count == 12)
+        #expect(slots.place(Array(1...9), quit: []).count == 12)
+        #expect(slots.place(Array(1...12), quit: []).count == 12)
         // Shrinks back once the last places are empty.
-        #expect(slots.place(Array(1...5)) == [1, 2, 3, 4, 5, nil, nil, nil])
+        #expect(slots.place(Array(1...5), quit: []) == [1, 2, 3, 4, 5, nil, nil, nil])
+    }
+
+    @Test func appsThatQuitKeepTheirPlaces() {
+        var slots = RecentSlots<Int>()
+        #expect(slots.place([1, 2, 3], quit: []) == [1, 2, 3, nil, nil, nil, nil, nil])
+        // 2 quits, and stays where it was.
+        #expect(slots.place([1, 3], quit: [2]) == [1, 2, 3, nil, nil, nil, nil, nil])
+        // And it's still there once it's running again.
+        #expect(slots.place([2, 1, 3], quit: []) == [1, 2, 3, nil, nil, nil, nil, nil])
+    }
+
+    @Test func appsThatQuitDontGrowTheRing() {
+        var slots = RecentSlots<Int>()
+        // Those that don't fit are left out, the ones that quit longest ago.
+        #expect(slots.place([1, 2], quit: Array(3...12)) == [1, 2, 3, 4, 5, 6, 7, 8])
+        // A new running app takes the place of the one that quit longest ago.
+        #expect(slots.place([1, 2, 13], quit: Array(3...12)) == [1, 2, 3, 4, 5, 6, 7, 13])
+        // With 9 running the ring grows, and those that quit fill the rest.
+        #expect(
+            slots.place(Array(1...9), quit: [10, 11, 12, 13])
+                == [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
+        )
     }
 
     @MainActor
@@ -778,7 +820,7 @@ import Testing
         history.activated(.current)
         history.activated(finder)
         let lookedUpAgain = NSRunningApplication(processIdentifier: finder.processIdentifier)
-        #expect(history.recent(before: lookedUpAgain, running: [finder, .current]) == [.current])
+        #expect(history.recent(before: lookedUpAgain, running: [finder, .current]).running == [.current])
     }
 
     @Test func parsesTheDoublePressDuration() throws {

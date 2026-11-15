@@ -9,11 +9,11 @@ import QuartzCore
 ///   points at, or cancels if the cursor is still in the dead zone.
 /// - Left click picks the app the cursor points at, or cancels from the center.
 /// - Right click or Escape cancels.
-/// - Tab swaps the configured apps for the other running ones, most recent
-///   first, and back. The configured ring opens first, so its apps keep their
-///   places.
+/// - Tab swaps the configured apps for the other recent ones, running or quit,
+///   most recent first, and back. The configured ring opens first, so its apps
+///   keep their places.
 /// - A double press of the hotkey, mouse button or fingers (`double_press_ms`)
-///   swaps in the other running apps too. After a quick press that doesn't pick
+///   swaps in the recent apps too. After a quick press that doesn't pick
 ///   an app, the ring stays up for a moment in case a second one comes.
 /// - With a modifier-only hotkey, typing a key or pressing another modifier
 ///   while holding it cancels, since that's someone typing ⌥E or using a
@@ -70,7 +70,7 @@ final class RadialMenuController: NSObject {
     private var ring = Ring.apps
     private var items: [MenuItem?] = []
     /// Where each recent app goes, kept between openings so they stay put.
-    private var recentSlots = RecentSlots<NSRunningApplication>()
+    private var recentSlots = RecentSlots<RecentAppID>()
     private var layout = RadialLayout(count: 0, radius: 0, iconSize: 0)
     /// Whether Tab has swapped the ring since it opened, which rules out a tap.
     private var switchedRings = false
@@ -331,11 +331,17 @@ final class RadialMenuController: NSObject {
             layout = appLayout
         case .recent:
             // Those already in the configured ring are a flick away there.
-            let recent = recentApps.recent.filter { app in
-                !appItems.contains { $0.runningApplication(in: [app]) != nil }
+            let runningApps = NSWorkspace.shared.runningApplications
+            let configured = appItems.compactMap { item -> RecentAppID? in
+                if case .app(_, let bundleID) = item.target { return .bundle(bundleID) }
+                return item.runningApplication(in: runningApps).map(RecentAppID.init)
             }
-            guard !recent.isEmpty else { return false }
-            items = recentSlots.place(recent).map { $0.map(MenuItem.init(running:)) }
+            let recent = recentApps.recent(excluding: configured)
+            guard !recent.running.isEmpty || !recent.quit.isEmpty else { return false }
+            let recentItems = Dictionary((recent.running + recent.quit).map { ($0.id, $0.item) }) { first, _ in first }
+            items = recentSlots.place(recent.running.map(\.id), quit: recent.quit.map(\.id)).map { id in
+                id.flatMap { recentItems[$0] }
+            }
             layout = RadialLayout(count: items.count, radius: config.radius, iconSize: config.iconSize)
         }
         self.ring = ring
