@@ -22,15 +22,14 @@ struct AppHistory<App: Equatable> {
         apps.removeAll { forgotten.contains($0) }
     }
 
-    /// Every app but `frontmost`, those in `running` and those that have quit,
-    /// each most recently in front first. Running apps that haven't been in
-    /// front since this started follow the others, in the order they're in
-    /// `running`.
-    func recent(before frontmost: App?, running: [App]) -> (running: [App], quit: [App]) {
+    /// The apps in `running` and those that have quit, each most recently in
+    /// front first. Running apps that haven't been in front since this started
+    /// follow the others, in the order they're in `running`.
+    func recent(running: [App]) -> (running: [App], quit: [App]) {
         let tracked = apps.filter { running.contains($0) }
         let untracked = running.filter { !apps.contains($0) }
         let quit = apps.filter { !running.contains($0) }
-        return ((tracked + untracked).filter { $0 != frontmost }, quit.filter { $0 != frontmost })
+        return (tracked + untracked, quit)
     }
 }
 
@@ -118,15 +117,13 @@ final class RecentApps {
         NSWorkspace.shared.runningApplications.filter { $0.activationPolicy == .regular }
     }
 
-    /// The apps other than the one in front and those in `excluded`, the
-    /// running ones and those that have quit, each most recently in front
-    /// first, like ⌘Tab.
+    /// The apps other than those in `excluded`, the running ones and those that
+    /// have quit, each most recently in front first, like ⌘Tab. The one in
+    /// front is included, so switching apps doesn't change which apps there
+    /// are and move them around the ring.
     func recent(excluding excluded: [RecentAppID]) -> (running: [RecentApp], quit: [RecentApp]) {
         let running = runningApps
-        let recent = history.recent(
-            before: NSWorkspace.shared.frontmostApplication.map(RecentAppID.init),
-            running: running.map(RecentAppID.init)
-        )
+        let recent = history.recent(running: running.map(RecentAppID.init))
         let runningItems = recent.running.filter { !excluded.contains($0) }.compactMap { id in
             running.first { RecentAppID($0) == id }.map { RecentApp(id: id, item: MenuItem(running: $0)) }
         }

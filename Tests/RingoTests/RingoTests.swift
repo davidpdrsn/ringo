@@ -749,15 +749,14 @@ import Testing
         #expect(history.apps == [5, 4, 3, 2])
     }
 
-    @Test func listsRecentAppsWithoutTheFrontmost() {
+    @Test func listsRecentApps() {
         var history = AppHistory<Int>()
         history.activated(1)
         history.activated(2)
         history.activated(3)
         // 4 and 5 are running but haven't been in front, so they go last in the
         // order they're running in.
-        #expect(history.recent(before: 3, running: [5, 1, 4, 2, 3]).running == [2, 1, 5, 4])
-        #expect(history.recent(before: nil, running: [1, 2, 3]).running == [3, 2, 1])
+        #expect(history.recent(running: [5, 1, 4, 2, 3]).running == [3, 2, 1, 5, 4])
     }
 
     @Test func listsAppsThatQuitApart() {
@@ -765,8 +764,8 @@ import Testing
         for app in 1...4 {
             history.activated(app)
         }
-        let recent = history.recent(before: 4, running: [1, 3, 4])
-        #expect(recent.running == [3, 1])
+        let recent = history.recent(running: [1, 3, 4])
+        #expect(recent.running == [4, 3, 1])
         #expect(recent.quit == [2])
     }
 
@@ -819,8 +818,8 @@ import Testing
         var history = AppHistory<NSRunningApplication>()
         history.activated(.current)
         history.activated(finder)
-        let lookedUpAgain = NSRunningApplication(processIdentifier: finder.processIdentifier)
-        #expect(history.recent(before: lookedUpAgain, running: [finder, .current]).running == [.current])
+        let lookedUpAgain = try #require(NSRunningApplication(processIdentifier: finder.processIdentifier))
+        #expect(history.recent(running: [lookedUpAgain, .current]).running == [finder, .current])
     }
 
     @Test func parsesTheDoublePressDuration() throws {

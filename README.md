@@ -15,12 +15,13 @@ one and let go to switch to it.
   is held.
 - **Click** while holding also switches. Right click or Escape cancels.
 - **Tab** while the menu is open swaps your apps for the other ones you've
-  used, leaving out the app you're in. Tab again goes back. The menu opens on
-  your own apps, so they keep their places. Other apps keep theirs too: each
-  takes the first free place, clockwise from 12 o'clock, and stays there. The
-  ring has room for 8 and grows 4 at a time when the running apps fill it up.
-  Apps that have quit fill the places left over, dimmed, and give up their place
-  when a running app needs it.
+  used, including the app you're in, so switching apps doesn't move them
+  around. Tab again goes back. The menu opens on your own apps, so they keep
+  their places. Other apps keep theirs too: each takes the first free place,
+  clockwise from 12 o'clock, and stays there. The ring has room for 8 and grows
+  4 at a time when the running apps fill it up. Apps that have quit fill the
+  places left over, dimmed, and give up their place when a running app needs
+  it.
 - **Double press** the hotkey (or the mouse button, or tap the trackpad fingers
   twice) and hold the second press to swap in the recent apps, like Tab.
 
