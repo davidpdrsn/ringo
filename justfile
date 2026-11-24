@@ -1,10 +1,12 @@
 app := "build/Ringo.app"
 installed := "/Applications/Ringo.app"
 
-# With only the Command Line Tools installed, swift-testing lives outside the
-# default search paths.
-clt_frameworks := "/Library/Developer/CommandLineTools/Library/Developer/Frameworks"
-test_flags := if path_exists(clt_frameworks / "Testing.framework") == "true" {
+# When the Command Line Tools are the active toolchain, swift-testing lives
+# outside the default search paths. Xcode's toolchain finds its own, and
+# pointing it at the Command Line Tools' copy breaks the test macros.
+clt := "/Library/Developer/CommandLineTools"
+clt_frameworks := clt / "Library/Developer/Frameworks"
+test_flags := if `xcode-select -p` == clt {
     "-Xswiftc -F" + clt_frameworks + " -Xlinker -F" + clt_frameworks + " -Xlinker -rpath -Xlinker " + clt_frameworks
 } else { "" }
 
