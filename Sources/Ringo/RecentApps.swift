@@ -150,9 +150,20 @@ final class RecentApps {
 /// and the apps that have quit fill the places they leave free. An app that
 /// quits keeps its place until a running app needs it, the one that quit the
 /// longest ago first.
+///
+/// With a `limit`, the ring has at most that many places, and only that many
+/// of the most recent running apps get one. A running app that falls out of
+/// them gives up its place, which the next app to come to the front takes.
 struct RecentSlots<App: Equatable> {
+    /// The most places the ring has, `nil` for no limit.
+    let limit: Int?
     /// The app in each place around the ring, `nil` where there's none.
     private(set) var slots: [App?] = []
+
+    init(limit: Int? = nil) {
+        precondition(limit.map { $0 > 0 } ?? true, "a ring needs at least one place")
+        self.limit = limit
+    }
 
     /// The ring has at least this many places, and grows by `growth` at a time.
     static var minimumCount: Int { 8 }
@@ -163,6 +174,8 @@ struct RecentSlots<App: Equatable> {
     /// free places in order, and the ones in neither list make room. Returns
     /// the app in each place.
     mutating func place(_ running: [App], quit: [App]) -> [App?] {
+        // At most `limit` running apps, so they always fit in its places.
+        let running = limit.map { Array(running.prefix($0)) } ?? running
         slots = slots.map { slot in slot.flatMap { running.contains($0) || quit.contains($0) ? $0 : nil } }
         for app in running where !slots.contains(app) {
             if let free = slots.firstIndex(of: nil) {
@@ -176,7 +189,7 @@ struct RecentSlots<App: Equatable> {
 
         let used = (slots.lastIndex { $0.map(running.contains) ?? false } ?? -1) + 1
         let steps = (used + Self.growth - 1) / Self.growth
-        let count = max(Self.minimumCount, steps * Self.growth)
+        let count = min(limit ?? .max, max(Self.minimumCount, steps * Self.growth))
         if slots.count > count {
             slots.removeLast(slots.count - count)
         } else {

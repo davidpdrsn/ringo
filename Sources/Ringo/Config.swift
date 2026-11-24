@@ -28,6 +28,8 @@ struct Config: Equatable {
     /// seconds of a quick press that didn't pick an app opens the menu on the
     /// recent apps. `nil` is off.
     var doublePressDuration: Double?
+    /// The most places the ring of recent apps has. `nil` is no limit.
+    var maxRecentApps: Int?
     var showMenuBarIcon: Bool
     var apps: [AppSpec]
 
@@ -240,6 +242,10 @@ extension Config {
 
         let doublePressMs = try checked(raw.doublePressMs, in: 0...1000, key: "double_press_ms") ?? defaultDoublePressMs
 
+        if let max = raw.maxRecentApps, max < 1 {
+            throw .invalid("max_recent_apps must be at least 1")
+        }
+
         return Config(
             hotkey: hotkey,
             radius: radius,
@@ -254,6 +260,7 @@ extension Config {
             moveCursorToWindow: raw.moveCursorToWindow ?? true,
             mouseButton: raw.mouseButton,
             doublePressDuration: doublePressMs > 0 ? doublePressMs / 1000 : nil,
+            maxRecentApps: raw.maxRecentApps,
             showMenuBarIcon: raw.showMenuBarIcon ?? true,
             apps: apps
         )
@@ -351,6 +358,11 @@ extension Config {
         # presses have to be shorter than this many milliseconds, and so does the
         # gap between them. 0 turns it off.
         # double_press_ms = 250
+
+        # The most apps the ring of recent apps shows. It has room for 8 and grows
+        # 4 at a time when the running apps fill it up, up to this many. The apps
+        # you used longest ago are left out.
+        # max_recent_apps = 8
 
         # Move the cursor to the middle of the app's window after switching to it.
         move_cursor_to_window = true
@@ -476,6 +488,7 @@ private struct RawConfig: Decodable {
     var moveCursorToWindow: Bool?
     var mouseButton: Int?
     var doublePressMs: Double?
+    var maxRecentApps: Int?
     var showMenuBarIcon: Bool?
     var icons: RawIcons?
     var outerRing: RawOuterRing?
@@ -489,6 +502,7 @@ private struct RawConfig: Decodable {
         case moveCursorToWindow = "move_cursor_to_window"
         case mouseButton = "mouse_button"
         case doublePressMs = "double_press_ms"
+        case maxRecentApps = "max_recent_apps"
         case showMenuBarIcon = "show_menu_bar_icon"
         case icons
         case outerRing = "outer_ring"
@@ -511,6 +525,7 @@ private struct RawConfig: Decodable {
         moveCursorToWindow = try container.decodeIfPresent(Bool.self, forKey: .moveCursorToWindow)
         mouseButton = try container.decodeIfPresent(Int.self, forKey: .mouseButton)
         doublePressMs = try container.decodeNumberIfPresent(forKey: .doublePressMs)
+        maxRecentApps = try container.decodeIfPresent(Int.self, forKey: .maxRecentApps)
         showMenuBarIcon = try container.decodeIfPresent(Bool.self, forKey: .showMenuBarIcon)
         icons = try container.decodeIfPresent(RawIcons.self, forKey: .icons)
         outerRing = try container.decodeIfPresent(RawOuterRing.self, forKey: .outerRing)

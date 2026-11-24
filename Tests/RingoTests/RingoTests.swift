@@ -810,6 +810,22 @@ import Testing
         )
     }
 
+    @Test func recentAppsStopAtTheLimit() {
+        var slots = RecentSlots<Int>(limit: 10)
+        // The ring grows up to the limit, not to the next step.
+        #expect(slots.place(Array(1...12), quit: []) == Array(1...10))
+        // The one used longest ago gives up its place to the new one.
+        #expect(slots.place([11] + Array(1...10), quit: []) == [1, 2, 3, 4, 5, 6, 7, 8, 9, 11])
+        // Apps that quit don't push past it either.
+        #expect(slots.place([1, 2], quit: Array(3...20)) == Array(1...8))
+    }
+
+    @Test func recentAppsCanStopShortOfTheMinimum() {
+        var slots = RecentSlots<Int>(limit: 4)
+        #expect(slots.place([1, 2], quit: [3, 4, 5]) == [1, 2, 3, 4])
+        #expect(slots.place([5, 1, 2, 3], quit: [4]) == [1, 2, 3, 5])
+    }
+
     @MainActor
     @Test func matchesTheSameAppLookedUpAgain() throws {
         // Running apps are compared rather than pids, which a process started
@@ -828,6 +844,12 @@ import Testing
         #expect(try Config.parse("double_press_ms = 400").doublePressDuration == 0.4)
         #expect(throws: ConfigError.self) { try Config.parse("double_press_ms = -1") }
         #expect(throws: ConfigError.self) { try Config.parse("double_press_ms = 5000") }
+    }
+
+    @Test func parsesTheMaxRecentApps() throws {
+        #expect(try Config.parse("").maxRecentApps == nil)
+        #expect(try Config.parse("max_recent_apps = 6").maxRecentApps == 6)
+        #expect(throws: ConfigError.self) { try Config.parse("max_recent_apps = 0") }
     }
 }
 

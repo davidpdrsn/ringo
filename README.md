@@ -19,7 +19,9 @@ one and let go to switch to it.
   around. Tab again goes back. The menu opens on your own apps, so they keep
   their places. Other apps keep theirs too: each takes the first free place,
   clockwise from 12 o'clock, and stays there. The ring has room for 8 and grows
-  4 at a time when the running apps fill it up. Apps that have quit fill the
+  4 at a time when the running apps fill it up, up to `max_recent_apps` if you
+  set it. Past that, the running app you used longest ago is left out, and the
+  app that pushed it out takes its place. Apps that have quit fill the
   places left over, dimmed, and give up their place when a running app needs
   it.
 - **Double press** the hotkey (or the mouse button, or tap the trackpad fingers
@@ -71,6 +73,9 @@ open_animation_ms = 180
 # A second press within this many milliseconds of a quick first one opens the
 # menu on the recent apps. 0 turns it off.
 double_press_ms = 250
+
+# The most apps the ring of recent apps shows. No limit by default.
+# max_recent_apps = 8
 
 # How far the icons are from the cursor, and their size, in points.
 [icons]

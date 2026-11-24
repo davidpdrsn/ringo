@@ -121,6 +121,10 @@ final class RadialMenuController: NSObject {
         iconSize = config.iconSize
         moveCursorToWindow = config.moveCursorToWindow
         doublePressDuration = config.doublePressDuration
+        // Keeps the recent apps in their places unless the limit changed.
+        if recentSlots.limit != config.maxRecentApps {
+            recentSlots = RecentSlots(limit: config.maxRecentApps)
+        }
         layout = RadialLayout(count: items.count, radius: config.radius, iconSize: config.iconSize)
         appLayout = layout
         menuView.configure(items: items, layout: layout, config: config)
