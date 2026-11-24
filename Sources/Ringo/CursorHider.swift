@@ -68,14 +68,14 @@ final class CursorHider {
     /// Hides the cursor again whenever the app shows it while coming to the front.
     private func keepHiddenWhileSettling() {
         stopSettling()
-        guard let isCursorVisible = Self.isCursorVisible else { return }
+        guard Self.isCursorVisible != nil else { return }
         let deadline = CACurrentMediaTime() + Self.settleTime
         let timer = Timer(timeInterval: Self.pollInterval, repeats: true) { [weak self] _ in
             MainActor.assumeIsolated {
                 guard let self else { return }
                 if CACurrentMediaTime() > deadline {
                     self.stopSettling()
-                } else if isCursorVisible() != 0 {
+                } else if Self.isCursorVisible?() != 0 {
                     self.hideCursor()
                 }
             }
